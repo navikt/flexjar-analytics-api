@@ -1,0 +1,43 @@
+<configuration>
+    <appender name="JSON" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder class="net.logstash.logback.encoder.LogstashEncoder">
+            <fieldNames>
+                <timestamp>timestamp</timestamp>
+                <message>message</message>
+                <logger>logger</logger>
+                <level>level</level>
+                <thread>thread</thread>
+            </fieldNames>
+        </encoder>
+    </appender>
+
+    <appender name="STDOUT" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder>
+            <pattern>%d{HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n</pattern>
+        </encoder>
+    </appender>
+
+    <!-- Use JSON logging in production (NAIS), plain text locally -->
+    <if condition='isDefined("NAIS_CLUSTER_NAME")'>
+        <then>
+            <root level="INFO">
+                <appender-ref ref="JSON"/>
+            </root>
+        </then>
+        <else>
+            <root level="INFO">
+                <appender-ref ref="STDOUT"/>
+            </root>
+        </else>
+    </if>
+
+    <!-- Reduce noise from libraries -->
+    <logger name="io.ktor" level="WARN"/>
+    <logger name="org.eclipse.jetty" level="WARN"/>
+    <logger name="io.netty" level="WARN"/>
+    <logger name="org.flywaydb" level="INFO"/>
+    <logger name="com.zaxxer.hikari" level="WARN"/>
+    
+    <!-- Our application logging -->
+    <logger name="no.nav.flexjar" level="DEBUG"/>
+</configuration>
