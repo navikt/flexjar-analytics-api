@@ -3,8 +3,13 @@ package no.nav.flexjar.config
 import io.ktor.http.*
 import io.ktor.server.application.*
 import io.ktor.server.plugins.statuspages.*
+import io.ktor.server.request.*
 import io.ktor.server.response.*
-import kotlinx.serialization.Serializable
+import no.nav.flexjar.config.exception.ApiError
+import no.nav.flexjar.config.exception.BadRequestException
+import no.nav.flexjar.config.exception.ForbiddenException
+import no.nav.flexjar.config.exception.NotFoundException
+import no.nav.flexjar.config.exception.UnauthorizedException
 import org.slf4j.LoggerFactory
 
 private val statusPageLog = LoggerFactory.getLogger("StatusPages")
@@ -12,53 +17,46 @@ private val statusPageLog = LoggerFactory.getLogger("StatusPages")
 fun Application.configureStatusPages() {
     install(StatusPages) {
         exception<Throwable> { call, cause ->
-            statusPageLog.error("Unhandled exception", cause)
-            call.respond(
-                HttpStatusCode.InternalServerError,
-                ErrorResponse(
-                    message = "Internal server error",
-                    details = if (isDev()) cause.message else null
-                )
-            )
+            logException(call, cause)
+            val apiError = determineApiError(cause, call.request.path())
+            call.respond(HttpStatusCode.fromValue(apiError.status), apiError)
         }
         
-        exception<IllegalArgumentException> { call, cause ->
-            call.respond(
-                HttpStatusCode.BadRequest,
-                ErrorResponse(message = cause.message ?: "Bad request")
-            )
+        status(HttpStatusCode.Forbidden) { call, status ->
+            val path = call.request.path()
+            val apiError = ApiError.forbidden(status.description, path)
+            call.respond(HttpStatusCode.Forbidden, apiError)
         }
         
-        exception<UnauthorizedException> { call, cause ->
-            call.respond(
-                HttpStatusCode.Unauthorized,
-                ErrorResponse(message = cause.message ?: "Unauthorized")
-            )
+        status(HttpStatusCode.Unauthorized) { call, status ->
+            val path = call.request.path()
+            val apiError = ApiError.unauthorized(status.description, path)
+            call.respond(HttpStatusCode.Unauthorized, apiError)
         }
         
-        exception<ForbiddenException> { call, cause ->
-            call.respond(
-                HttpStatusCode.Forbidden,
-                ErrorResponse(message = cause.message ?: "Forbidden")
-            )
-        }
-        
-        status(HttpStatusCode.NotFound) { call, _ ->
-            call.respond(
-                HttpStatusCode.NotFound,
-                ErrorResponse(message = "Not found")
-            )
+        status(HttpStatusCode.NotFound) { call, status ->
+            val path = call.request.path()
+            val apiError = ApiError.notFound(status.description, path)
+            call.respond(HttpStatusCode.NotFound, apiError)
         }
     }
 }
 
-@Serializable
-data class ErrorResponse(
-    val message: String,
-    val details: String? = null
-)
+private fun logException(call: ApplicationCall, cause: Throwable) {
+    val logMessage = "Caught ${cause::class.simpleName} exception on ${call.request.path()}"
+    statusPageLog.error(logMessage, cause)
+}
 
-class UnauthorizedException(message: String) : RuntimeException(message)
-class ForbiddenException(message: String) : RuntimeException(message)
-
-private fun isDev(): Boolean = System.getenv("NAIS_CLUSTER_NAME") == "dev-gcp"
+private fun determineApiError(cause: Throwable, path: String?): ApiError {
+    return when (cause) {
+        is BadRequestException -> ApiError.badRequest(cause.message ?: "Bad request", path)
+        is IllegalArgumentException -> ApiError.badRequest(cause.message ?: "Illegal argument", path)
+        is NotFoundException -> ApiError.notFound(cause.message ?: "Not found", path)
+        is ForbiddenException -> ApiError.forbidden(cause.message ?: "Forbidden", path)
+        is UnauthorizedException -> ApiError.unauthorized(cause.message ?: "Unauthorized", path)
+        else -> ApiError.internalServerError(
+            if (isDev()) cause.message ?: "Internal server error" else "Internal server error",
+            path
+        )
+    }
+}

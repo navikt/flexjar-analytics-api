@@ -10,7 +10,10 @@ import javax.sql.DataSource
 private val log = LoggerFactory.getLogger("Database")
 
 lateinit var dataSource: DataSource
-    private set
+
+fun setDataSourceForTesting(ds: DataSource) {
+    dataSource = ds
+}
 
 fun Application.configureDatabase() {
     val dbConfig = DatabaseConfig.fromEnvironment()

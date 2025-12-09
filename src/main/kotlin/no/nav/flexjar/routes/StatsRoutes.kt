@@ -12,9 +12,9 @@ import no.nav.flexjar.repository.FeedbackRepository
 import java.time.LocalDate
 import java.time.temporal.ChronoUnit
 
-private val feedbackRepository = FeedbackRepository()
+private val defaultFeedbackRepository = FeedbackRepository()
 
-fun Route.statsRoutes() {
+fun Route.statsRoutes(repository: FeedbackRepository = defaultFeedbackRepository) {
     route("/api/v1/intern/stats") {
         // Get statistics for feedback
         get {
@@ -27,7 +27,7 @@ fun Route.statsRoutes() {
                 deviceType = call.request.queryParameters["deviceType"]?.takeIf { it != "alle" }
             )
             
-            val stats = feedbackRepository.getStats(query)
+            val stats = repository.getStats(query)
             
             @Suppress("UNCHECKED_CAST")
             val byRating = stats["byRating"] as? Map<String, Int> ?: emptyMap()
@@ -96,7 +96,7 @@ fun Route.statsRoutes() {
                 feedbackId = call.request.queryParameters["feedbackId"]
             )
             
-            val stats = feedbackRepository.getStats(query)
+            val stats = repository.getStats(query)
             
             @Suppress("UNCHECKED_CAST")
             val byRating = stats["byRating"] as? Map<String, Int> ?: emptyMap()
@@ -118,7 +118,7 @@ fun Route.statsRoutes() {
                 feedbackId = call.request.queryParameters["feedbackId"]
             )
             
-            val stats = feedbackRepository.getStats(query)
+            val stats = repository.getStats(query)
             
             @Suppress("UNCHECKED_CAST")
             val byDate = stats["byDate"] as? Map<String, Int> ?: emptyMap()

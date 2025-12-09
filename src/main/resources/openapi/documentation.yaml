@@ -1,0 +1,591 @@
+openapi: 3.1.0
+info:
+  title: Flexjar Analytics API
+  description: Backend API for Flexjar survey analytics with PostgreSQL storage.
+  version: 1.0.0
+  contact:
+    name: Team Flex
+    email: flex@nav.no
+
+servers:
+  - url: http://localhost:8080
+    description: Local development
+  - url: https://flexjar-analytics-api.intern.dev.nav.no
+    description: Development
+  - url: https://flexjar-analytics-api.intern.nav.no
+    description: Production
+
+tags:
+  - name: Analytics
+    description: Protected endpoints for viewing and managing feedback data
+  - name: Submission
+    description: Public endpoints for submitting feedback from widgets
+  - name: Internal
+    description: Health check endpoints for NAIS
+
+paths:
+  # ==================== Analytics (Protected) ====================
+  /api/v1/intern/feedback:
+    get:
+      tags: [Analytics]
+      summary: List feedback with filters
+      description: Returns paginated feedback with optional filters for team, app, date range, tags, and text search.
+      security:
+        - azure: []
+      parameters:
+        - name: team
+          in: query
+          schema:
+            type: string
+            default: flex
+          description: Filter by team
+        - name: app
+          in: query
+          schema:
+            type: string
+          description: Filter by app (or 'alle' for all)
+        - name: from
+          in: query
+          schema:
+            type: string
+            format: date
+          description: Start date (ISO format)
+        - name: to
+          in: query
+          schema:
+            type: string
+            format: date
+          description: End date (ISO format)
+        - name: feedbackId
+          in: query
+          schema:
+            type: string
+          description: Filter by survey/feedback ID
+        - name: medTekst
+          in: query
+          schema:
+            type: boolean
+            default: false
+          description: Only include feedback with text
+        - name: stjerne
+          in: query
+          schema:
+            type: boolean
+            default: false
+          description: Only include starred feedback
+        - name: tags
+          in: query
+          schema:
+            type: string
+          description: Comma-separated list of tags
+        - name: fritekst
+          in: query
+          schema:
+            type: string
+          description: Free text search (space-separated terms)
+        - name: deviceType
+          in: query
+          schema:
+            type: string
+            enum: [mobile, tablet, desktop]
+          description: Filter by device type
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 0
+          description: Page number (0-indexed, defaults to last page)
+        - name: size
+          in: query
+          schema:
+            type: integer
+            default: 10
+          description: Page size
+      responses:
+        '200':
+          description: Paginated feedback
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FeedbackPage'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /api/v1/intern/feedback/{id}:
+    get:
+      tags: [Analytics]
+      summary: Get single feedback
+      security:
+        - azure: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Feedback details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FeedbackDto'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    delete:
+      tags: [Analytics]
+      summary: Soft delete feedback
+      description: Clears feedback text (soft delete)
+      security:
+        - azure: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: Successfully deleted
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/v1/intern/feedback/{id}/tags:
+    post:
+      tags: [Analytics]
+      summary: Add tag to feedback
+      security:
+        - azure: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                tag:
+                  type: string
+              required: [tag]
+      responses:
+        '201':
+          description: Tag added
+        '404':
+          $ref: '#/components/responses/NotFound'
+    delete:
+      tags: [Analytics]
+      summary: Remove tag from feedback
+      security:
+        - azure: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: tag
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: Tag removed
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/v1/intern/feedback/tags:
+    get:
+      tags: [Analytics]
+      summary: List all unique tags
+      security:
+        - azure: []
+      responses:
+        '200':
+          description: List of tags
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: string
+
+  /api/v1/intern/feedback/teams:
+    get:
+      tags: [Analytics]
+      summary: List teams and their apps
+      security:
+        - azure: []
+      responses:
+        '200':
+          description: Teams and apps mapping
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TeamsAndApps'
+
+  /api/v1/intern/stats:
+    get:
+      tags: [Analytics]
+      summary: Get feedback statistics
+      description: Returns aggregated statistics including rating distribution, timeline data, and device breakdown.
+      security:
+        - azure: []
+      parameters:
+        - name: team
+          in: query
+          schema:
+            type: string
+        - name: app
+          in: query
+          schema:
+            type: string
+        - name: from
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: to
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: feedbackId
+          in: query
+          schema:
+            type: string
+        - name: deviceType
+          in: query
+          schema:
+            type: string
+            enum: [mobile, tablet, desktop]
+      responses:
+        '200':
+          description: Statistics
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FeedbackStats'
+
+  /api/v1/intern/export:
+    get:
+      tags: [Analytics]
+      summary: Export feedback data
+      description: Export feedback in CSV, JSON, or Excel format
+      security:
+        - azure: []
+      parameters:
+        - name: format
+          in: query
+          schema:
+            type: string
+            enum: [csv, json, excel]
+            default: csv
+        - name: team
+          in: query
+          schema:
+            type: string
+        - name: app
+          in: query
+          schema:
+            type: string
+        - name: from
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: to
+          in: query
+          schema:
+            type: string
+            format: date
+      responses:
+        '200':
+          description: Exported data
+          content:
+            text/csv:
+              schema:
+                type: string
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/FeedbackDto'
+            application/vnd.openxmlformats-officedocument.spreadsheetml.sheet:
+              schema:
+                type: string
+                format: binary
+
+  # ==================== Submission (Public) ====================
+  /api/v1/feedback:
+    post:
+      tags: [Submission]
+      summary: Submit feedback (legacy)
+      description: Submit feedback from widget. Returns 200 OK.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FeedbackSubmission'
+      responses:
+        '200':
+          description: Feedback received
+
+  /api/v2/feedback:
+    post:
+      tags: [Submission]
+      summary: Submit feedback
+      description: Submit feedback from widget. Returns created ID.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FeedbackSubmission'
+      responses:
+        '201':
+          description: Feedback created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id:
+                    type: string
+
+  # ==================== Internal ====================
+  /internal/isAlive:
+    get:
+      tags: [Internal]
+      summary: Liveness check
+      responses:
+        '200':
+          description: Service is alive
+
+  /internal/isReady:
+    get:
+      tags: [Internal]
+      summary: Readiness check
+      responses:
+        '200':
+          description: Service is ready
+
+components:
+  securitySchemes:
+    azure:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Azure AD token via Wonderwall
+
+  schemas:
+    FeedbackDto:
+      type: object
+      properties:
+        id:
+          type: string
+        submittedAt:
+          type: string
+          format: date-time
+        app:
+          type: string
+          nullable: true
+        surveyId:
+          type: string
+        surveyVersion:
+          type: string
+          nullable: true
+        context:
+          $ref: '#/components/schemas/SubmissionContext'
+        answers:
+          type: array
+          items:
+            $ref: '#/components/schemas/Answer'
+        tags:
+          type: array
+          items:
+            type: string
+        sensitiveDataRedacted:
+          type: boolean
+
+    SubmissionContext:
+      type: object
+      properties:
+        url:
+          type: string
+        pathname:
+          type: string
+        deviceType:
+          type: string
+          enum: [mobile, tablet, desktop]
+        viewportWidth:
+          type: integer
+        viewportHeight:
+          type: integer
+
+    Answer:
+      type: object
+      properties:
+        fieldId:
+          type: string
+        fieldType:
+          type: string
+          enum: [RATING, TEXT, SINGLE_CHOICE, MULTI_CHOICE, DATE]
+        question:
+          type: object
+          properties:
+            label:
+              type: string
+            description:
+              type: string
+        value:
+          oneOf:
+            - type: object
+              properties:
+                type:
+                  type: string
+                  const: rating
+                rating:
+                  type: integer
+            - type: object
+              properties:
+                type:
+                  type: string
+                  const: text
+                text:
+                  type: string
+
+    FeedbackPage:
+      type: object
+      properties:
+        content:
+          type: array
+          items:
+            $ref: '#/components/schemas/FeedbackDto'
+        totalPages:
+          type: integer
+        totalElements:
+          type: integer
+        size:
+          type: integer
+        number:
+          type: integer
+        hasNext:
+          type: boolean
+        hasPrevious:
+          type: boolean
+
+    FeedbackStats:
+      type: object
+      properties:
+        totalCount:
+          type: integer
+        countWithText:
+          type: integer
+        countWithoutText:
+          type: integer
+        averageRating:
+          type: number
+          nullable: true
+        byRating:
+          type: object
+          additionalProperties:
+            type: integer
+        byApp:
+          type: object
+          additionalProperties:
+            type: integer
+        byDate:
+          type: object
+          additionalProperties:
+            type: integer
+        byDevice:
+          type: object
+          additionalProperties:
+            type: object
+            properties:
+              count:
+                type: integer
+              averageRating:
+                type: number
+        ratingByDate:
+          type: object
+          additionalProperties:
+            type: object
+            properties:
+              average:
+                type: number
+              count:
+                type: integer
+
+    TeamsAndApps:
+      type: object
+      properties:
+        teams:
+          type: object
+          additionalProperties:
+            type: array
+            items:
+              type: string
+
+    FeedbackSubmission:
+      type: object
+      properties:
+        feedbackId:
+          type: string
+          description: Survey identifier
+        svar:
+          type: integer
+          description: Rating (1-5)
+        feedback:
+          type: string
+          description: Main text feedback
+        app:
+          type: string
+        team:
+          type: string
+      required: [feedbackId]
+
+    ApiError:
+      type: object
+      properties:
+        status:
+          type: integer
+        type:
+          type: string
+          enum: [AUTHENTICATION_ERROR, AUTHORIZATION_ERROR, NOT_FOUND, INTERNAL_SERVER_ERROR, BAD_REQUEST]
+        message:
+          type: string
+        timestamp:
+          type: string
+          format: date-time
+        path:
+          type: string
+
+  responses:
+    Unauthorized:
+      description: Authentication required
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ApiError'
+    Forbidden:
+      description: Access denied
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ApiError'
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ApiError'

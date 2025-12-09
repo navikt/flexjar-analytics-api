@@ -14,10 +14,10 @@ import no.nav.flexjar.repository.FeedbackRepository
 import org.apache.poi.xssf.usermodel.XSSFWorkbook
 import java.io.ByteArrayOutputStream
 
-private val feedbackRepository = FeedbackRepository()
+private val defaultFeedbackRepository = FeedbackRepository()
 private val json = Json { prettyPrint = true }
 
-fun Route.exportRoutes() {
+fun Route.exportRoutes(repository: FeedbackRepository = defaultFeedbackRepository) {
     route("/api/v1/intern/export") {
         // Export feedback data
         get {
@@ -39,7 +39,7 @@ fun Route.exportRoutes() {
                 feedbackId = call.request.queryParameters["feedbackId"]
             )
             
-            val (content, _, _) = feedbackRepository.findPaginated(query)
+            val (content, _, _) = repository.findPaginated(query)
             
             when (format) {
                 ExportFormat.CSV -> exportCsv(call, content)

@@ -12,9 +12,9 @@ import no.nav.flexjar.repository.FeedbackRepository
 import org.slf4j.LoggerFactory
 
 private val log = LoggerFactory.getLogger("FeedbackRoutes")
-private val feedbackRepository = FeedbackRepository()
+private val defaultFeedbackRepository = FeedbackRepository()
 
-fun Route.feedbackRoutes() {
+fun Route.feedbackRoutes(repository: FeedbackRepository = defaultFeedbackRepository) {
     route("/api/v1/intern") {
         // List feedback with pagination and filters
         get("/feedback") {
@@ -33,7 +33,7 @@ fun Route.feedbackRoutes() {
                 deviceType = call.request.queryParameters["deviceType"]?.takeIf { it.isNotBlank() }
             )
             
-            val (content, total, page) = feedbackRepository.findPaginated(query)
+            val (content, total, page) = repository.findPaginated(query)
             val totalPages = if (query.size > 0) ((total + query.size - 1) / query.size).toInt() else 0
             
             call.respond(FeedbackPage(
@@ -54,7 +54,7 @@ fun Route.feedbackRoutes() {
                 return@get
             }
             
-            val feedback = feedbackRepository.findById(id)
+            val feedback = repository.findById(id)
             if (feedback == null) {
                 call.respond(HttpStatusCode.NotFound)
                 return@get
@@ -70,7 +70,7 @@ fun Route.feedbackRoutes() {
                 return@delete
             }
             
-            val deleted = feedbackRepository.softDelete(id)
+            val deleted = repository.softDelete(id)
             if (deleted) {
                 call.respond(HttpStatusCode.NoContent)
             } else {
@@ -86,7 +86,7 @@ fun Route.feedbackRoutes() {
             }
             
             val input = call.receive<TagInput>()
-            val added = feedbackRepository.addTag(id, input.tag)
+            val added = repository.addTag(id, input.tag)
             
             if (added) {
                 call.respond(HttpStatusCode.Created)
@@ -107,7 +107,7 @@ fun Route.feedbackRoutes() {
                 return@delete
             }
             
-            val removed = feedbackRepository.removeTag(id, tag)
+            val removed = repository.removeTag(id, tag)
             if (removed) {
                 call.respond(HttpStatusCode.NoContent)
             } else {
@@ -117,13 +117,13 @@ fun Route.feedbackRoutes() {
         
         // Get all tags
         get("/feedback/tags") {
-            val tags = feedbackRepository.findAllTags()
+            val tags = repository.findAllTags()
             call.respond(tags)
         }
         
         // Get all teams and their apps
         get("/feedback/teams") {
-            val teamsAndApps = feedbackRepository.findAllTeamsAndApps()
+            val teamsAndApps = repository.findAllTeamsAndApps()
             call.respond(TeamsAndApps(teams = teamsAndApps))
         }
     }
