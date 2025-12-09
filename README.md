@@ -2,6 +2,22 @@
 
 Backend API for Flexjar survey analytics. Built with Ktor.
 
+## Quick Start
+
+```bash
+# Prerequisites: JDK 21, Docker
+
+# 1. Start PostgreSQL
+docker run -d --name flexjar-db \
+  -e POSTGRES_USER=flexjar -e POSTGRES_PASSWORD=flexjar -e POSTGRES_DB=flexjar \
+  -p 5432:5432 postgres:15
+
+# 2. Run the API
+./gradlew run
+# API available at http://localhost:8080
+# Swagger UI at http://localhost:8080/swagger
+```
+
 ## Features
 
 - 📊 **Analytics endpoints** - Statistics, aggregations, timeline data
