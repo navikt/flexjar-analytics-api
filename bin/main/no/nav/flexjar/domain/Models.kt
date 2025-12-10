@@ -235,8 +235,7 @@ data class FeedbackQuery(
     val to: String? = null,
     val feedbackId: String? = null,
     val lavRating: Boolean = false,
-    val deviceType: String? = null,
-    val ubehandlet: Boolean = false
+    val deviceType: String? = null
 )
 
 /**
@@ -248,8 +247,7 @@ data class StatsQuery(
     val from: String? = null,
     val to: String? = null,
     val feedbackId: String? = null,
-    val deviceType: String? = null,
-    val ubehandlet: Boolean = false
+    val deviceType: String? = null
 )
 
 /**
