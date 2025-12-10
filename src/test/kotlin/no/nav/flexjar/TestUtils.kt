@@ -57,6 +57,11 @@ fun insertTestFeedback(
                     "feedbackId": "$id",
                     "team": "$team",
                     "app": "$app",
+                    "svar": $svar,
+                    "context": {
+                        "pathname": "/test/path",
+                        "deviceType": "desktop"
+                    },
                     "answers": [
                         {"questionId": "svar", "value": $svar, "questionPrompt": "Hvordan opplevde du tjenesten?"},
                         {"questionId": "feedback", "value": "$feedback", "questionPrompt": "Har du tilbakemelding?"}

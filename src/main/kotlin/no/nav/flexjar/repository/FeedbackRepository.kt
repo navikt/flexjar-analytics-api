@@ -198,6 +198,22 @@ class FeedbackRepository(
         """.trimIndent()
         stats["byPathname"] = executePathnameStats(byPathnameSql, params)
         
+        // Lowest rating paths (new)
+        val lowestRatingPathsSql = """
+            SELECT feedback_json::json->'context'->>'pathname' as pathname,
+                   COUNT(*) as count,
+                   AVG((feedback_json::json->>'svar')::numeric) as avg_rating
+            FROM feedback 
+            $whereClause 
+            AND feedback_json::json->'context'->>'pathname' IS NOT NULL
+            AND feedback_json::json->>'svar' IS NOT NULL
+            GROUP BY feedback_json::json->'context'->>'pathname'
+            HAVING COUNT(*) >= 3
+            ORDER BY avg_rating ASC
+            LIMIT 5
+        """.trimIndent()
+        stats["lowestRatingPaths"] = executePathnameStats(lowestRatingPathsSql, params)
+        
         return stats
     }
     
@@ -311,6 +327,7 @@ class FeedbackRepository(
         if (query.from != null) conditions.add("opprettet >= ?::timestamptz")
         if (query.to != null) conditions.add("opprettet <= ?::timestamptz")
         if (query.lavRating) conditions.add("(feedback_json::json->>'svar')::int <= 2")
+        if (query.ubehandlet) conditions.add("(tags NOT LIKE '%behandlet%' OR tags IS NULL)")
         if (query.deviceType != null) conditions.add("feedback_json::json->'context'->>'deviceType' = ?")
         
         query.tags.forEachIndexed { index, _ ->
@@ -353,6 +370,7 @@ class FeedbackRepository(
         if (query.feedbackId != null) conditions.add("feedback_json::json->>'feedbackId' = ?")
         if (query.from != null) conditions.add("opprettet >= ?::timestamptz")
         if (query.to != null) conditions.add("opprettet <= ?::timestamptz")
+        if (query.ubehandlet) conditions.add("(tags NOT LIKE '%behandlet%' OR tags IS NULL)")
         if (query.deviceType != null) conditions.add("feedback_json::json->'context'->>'deviceType' = ?")
         
         return "WHERE " + conditions.joinToString(" AND ")

@@ -58,6 +58,7 @@ class StatsRoutesTest : FunSpec({
                 header(HttpHeaders.Authorization, "Bearer test-token")
             }
             
+            println("RATINGS RESPONSE: " + response.bodyAsText())
             response.status shouldBe HttpStatusCode.OK
             response.bodyAsText() shouldContain "distribution"
             response.bodyAsText() shouldContain "average"

@@ -165,6 +165,7 @@ data class FeedbackStats(
     val ratingByDate: Map<String, RatingByDateEntry> = emptyMap(),
     val byDevice: Map<String, DeviceStats> = emptyMap(),
     val byPathname: Map<String, PathnameStats> = emptyMap(),
+    val lowestRatingPaths: Map<String, PathnameStats> = emptyMap(),
     val fieldStats: List<FieldStat> = emptyList()
 )
 
@@ -234,7 +235,8 @@ data class FeedbackQuery(
     val to: String? = null,
     val feedbackId: String? = null,
     val lavRating: Boolean = false,
-    val deviceType: String? = null
+    val deviceType: String? = null,
+    val ubehandlet: Boolean = false
 )
 
 /**
@@ -246,7 +248,8 @@ data class StatsQuery(
     val from: String? = null,
     val to: String? = null,
     val feedbackId: String? = null,
-    val deviceType: String? = null
+    val deviceType: String? = null,
+    val ubehandlet: Boolean = false
 )
 
 /**
@@ -257,3 +260,21 @@ enum class ExportFormat {
     JSON,
     EXCEL
 }
+
+@Serializable
+data class RatingDistribution(
+    val distribution: Map<String, Int>,
+    val average: Double?,
+    val total: Int
+)
+
+@Serializable
+data class TimelineEntry(
+    val date: String,
+    val count: Int
+)
+
+@Serializable
+data class TimelineResponse(
+    val data: List<TimelineEntry>
+)

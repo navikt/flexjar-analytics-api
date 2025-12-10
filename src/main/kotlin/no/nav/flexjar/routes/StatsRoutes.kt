@@ -57,9 +57,17 @@ fun Route.statsRoutes(repository: FeedbackRepository = defaultFeedbackRepository
                 )
             }
             
-            @Suppress("UNCHECKED_CAST")
             val byPathnameRaw = stats["byPathname"] as? Map<String, Map<String, Any>> ?: emptyMap()
             val byPathname = byPathnameRaw.mapValues { (_, v) ->
+                PathnameStats(
+                    count = (v["count"] as? Number)?.toInt() ?: 0,
+                    averageRating = (v["averageRating"] as? Number)?.toDouble() ?: 0.0
+                )
+            }
+
+            @Suppress("UNCHECKED_CAST")
+            val lowestRatingPathsRaw = stats["lowestRatingPaths"] as? Map<String, Map<String, Any>> ?: emptyMap()
+            val lowestRatingPaths = lowestRatingPathsRaw.mapValues { (_, v) ->
                 PathnameStats(
                     count = (v["count"] as? Number)?.toInt() ?: 0,
                     averageRating = (v["averageRating"] as? Number)?.toDouble() ?: 0.0
@@ -82,7 +90,8 @@ fun Route.statsRoutes(repository: FeedbackRepository = defaultFeedbackRepository
                 ),
                 ratingByDate = ratingByDate,
                 byDevice = byDevice,
-                byPathname = byPathname
+                byPathname = byPathname,
+                lowestRatingPaths = lowestRatingPaths
             ))
         }
         
@@ -101,10 +110,10 @@ fun Route.statsRoutes(repository: FeedbackRepository = defaultFeedbackRepository
             @Suppress("UNCHECKED_CAST")
             val byRating = stats["byRating"] as? Map<String, Int> ?: emptyMap()
             
-            call.respond(mapOf(
-                "distribution" to byRating,
-                "average" to calculateAverageRating(byRating),
-                "total" to byRating.values.sum()
+            call.respond(no.nav.flexjar.domain.RatingDistribution(
+                distribution = byRating,
+                average = calculateAverageRating(byRating),
+                total = byRating.values.sum()
             ))
         }
         
@@ -123,10 +132,10 @@ fun Route.statsRoutes(repository: FeedbackRepository = defaultFeedbackRepository
             @Suppress("UNCHECKED_CAST")
             val byDate = stats["byDate"] as? Map<String, Int> ?: emptyMap()
             
-            call.respond(mapOf(
-                "data" to byDate.map { (date, count) ->
-                    mapOf("date" to date, "count" to count)
-                }.sortedBy { it["date"] as String }
+            call.respond(no.nav.flexjar.domain.TimelineResponse(
+                data = byDate.map { (date, count) ->
+                    no.nav.flexjar.domain.TimelineEntry(date = date, count = count)
+                }.sortedBy { it.date }
             ))
         }
     }
