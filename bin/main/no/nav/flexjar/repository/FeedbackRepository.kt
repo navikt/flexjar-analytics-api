@@ -558,6 +558,12 @@ class FeedbackRepository(
         
         var totalSubmissions = 0
         
+        // dailyStats aggregation
+        val dailyStats = mutableMapOf<String, MutableMap<String, Int>>() // date -> { total, success }
+        
+        // questionText extraction (take from first logical feedback)
+        var questionText: String? = null
+
         feedbacks.forEach { record ->
             val jsonElement = try {
                 json.parseToJsonElement(record.feedbackJson)
@@ -576,6 +582,13 @@ class FeedbackRepository(
                 val value = valObj?.get("selectedOptionId")?.jsonPrimitive?.content 
                          ?: valObj?.get("text")?.jsonPrimitive?.content 
                          ?: ""
+                
+                // While we are here, try to grab the question text from the 'task' field if missing
+                if (questionText == null && id == "task") {
+                    val qObj = obj["question"]?.jsonObject
+                    questionText = qObj?.get("label")?.jsonPrimitive?.content
+                }
+                
                 id to value
             }
             
@@ -585,6 +598,15 @@ class FeedbackRepository(
             
             totalSubmissions++
             
+            // --- DAILY STATS ---
+            val dateStr = record.opprettet.toLocalDate().toString()
+            val dayStat = dailyStats.getOrPut(dateStr) { mutableMapOf("total" to 0, "success" to 0) }
+            dayStat["total"] = (dayStat["total"] ?: 0) + 1
+            if (successValue == "yes") {
+                dayStat["success"] = (dayStat["success"] ?: 0) + 1
+            }
+
+            // --- TASK STATS ---
             val stats = taskStatsMap.getOrPut(taskValue) { 
                 mutableMapOf(
                     "total" to 0, 
@@ -604,15 +626,7 @@ class FeedbackRepository(
             
              // Track blockers for failures/partials if present
             if ((successValue == "no" || successValue == "partial") && !blockerValue.isNullOrBlank()) {
-                val blockerKey = "blocker_$blockerValue" // Naive grouping, ideally we'd normalize or just list them
-                // For now, let's just count specific text strings if we wanted, but likely we want a list of texts.
-                // The requirements say "blockerCounts". Aggregating free text is hard. 
-                // Let's assume for MVP we just count occurrences of the text string if it repeats, or ignore.
-                // Actually, "blockerPrompt" was free text. "blockerCounts" suggests categorization.
-                // If the user inputs free text, we can't easily count defined categories without AI or manual tagging.
-                // Let's attempt to count identical strings, or maybe we should just return list of blockers separately?
-                // The TopTaskStats model has `blockerCounts: Map<String, Int>`.
-                // Let's count the exact strings for now (e.g. if many people say "Login error").
+                val blockerKey = "blocker_$blockerValue" // Naive grouping
                 stats[blockerKey] = (stats[blockerKey] ?: 0) + 1
             }
         }
@@ -641,9 +655,19 @@ class FeedbackRepository(
             )
         }.sortedByDescending { it.totalCount }
         
+        // Convert dailyStats map to expected format
+        val dailyStatsResult = dailyStats.mapValues { (_, v) -> 
+            no.nav.flexjar.domain.DailyStat(
+                total = v["total"] ?: 0,
+                success = v["success"] ?: 0
+            )
+        }
+        
         return TopTasksResponse(
             totalSubmissions = totalSubmissions,
-            tasks = taskStatsList
+            tasks = taskStatsList,
+            dailyStats = dailyStatsResult,
+            questionText = questionText
         )
     }
 
@@ -673,25 +697,12 @@ class FeedbackRepository(
         val surveyVersion = jsonObj["surveyVersion"]?.jsonPrimitive?.contentOrNull
         
         val surveyTypeStr = jsonObj["surveyType"]?.jsonPrimitive?.contentOrNull
-        val surveyType = if (surveyTypeStr != null) {
-            try { no.nav.flexjar.domain.SurveyType.valueOf(surveyTypeStr.uppercase()) } catch (e: Exception) { no.nav.flexjar.domain.SurveyType.CUSTOM }
-        } else {
-            // infer from legacy data?
-            // If "svar" (rating) exists at top level payload (legacy) or in answers, it's RATING (mostly)
-            // But let's just null or Custom if not explicitly set.
-            // Actually implementation guide says "default to 'rating' if missing for legacy compatibility" or similar?
-            // Let's assume null for now, or CUSTOM.
-            // Wait, we defined SurveyType enum as RATING, TOP_TASKS, CUSTOM. 
-            // If we send "rating" from widget, valueOf("RATING") works?
-            // Widget sends "rating", "topTasks", "custom".
-            // valueOf requires exact match to Enum name (RATING, TOP_TASKS, CUSTOM).
-            // So we need to map "rating" -> RATING, "topTasks" -> TOP_TASKS.
-            when (surveyTypeStr) {
-                "rating" -> no.nav.flexjar.domain.SurveyType.RATING
-                "topTasks" -> no.nav.flexjar.domain.SurveyType.TOP_TASKS
-                "custom" -> no.nav.flexjar.domain.SurveyType.CUSTOM
-                else -> null
-            }
+        val surveyType = when (surveyTypeStr) {
+            "rating", "RATING" -> no.nav.flexjar.domain.SurveyType.RATING
+            "topTasks", "TOP_TASKS" -> no.nav.flexjar.domain.SurveyType.TOP_TASKS
+            "custom", "CUSTOM" -> no.nav.flexjar.domain.SurveyType.CUSTOM
+            null -> null // Or default?
+            else -> no.nav.flexjar.domain.SurveyType.CUSTOM
         }
         
         // Parse context if present

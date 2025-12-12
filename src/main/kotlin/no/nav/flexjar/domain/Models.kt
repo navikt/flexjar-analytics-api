@@ -303,7 +303,15 @@ data class TopTaskStats(
 )
 
 @Serializable
+data class DailyStat(
+    val total: Int,
+    val success: Int
+)
+
+@Serializable
 data class TopTasksResponse(
     val totalSubmissions: Int,
-    val tasks: List<TopTaskStats>
+    val tasks: List<TopTaskStats>,
+    val dailyStats: Map<String, DailyStat> = emptyMap(),
+    val questionText: String? = null
 )
