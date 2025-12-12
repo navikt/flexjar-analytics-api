@@ -88,6 +88,9 @@ fun Route.statsRoutes(repository: FeedbackRepository = defaultFeedbackRepository
                     to = query.to,
                     days = days
                 ),
+                surveyType = (stats["surveyType"] as? String)?.let { 
+                    try { no.nav.flexjar.domain.SurveyType.valueOf(it.uppercase()) } catch(e: Exception) { no.nav.flexjar.domain.SurveyType.CUSTOM }
+                },
                 ratingByDate = ratingByDate,
                 byDevice = byDevice,
                 byPathname = byPathname,
@@ -138,6 +141,21 @@ fun Route.statsRoutes(repository: FeedbackRepository = defaultFeedbackRepository
                 }.sortedBy { it.date }
             ))
         }
+
+        // Get Top Tasks statistics
+        get("/top-tasks") {
+            val query = StatsQuery(
+                team = call.request.queryParameters["team"] ?: "flex",
+                app = call.request.queryParameters["app"]?.takeIf { it != "alle" },
+                from = call.request.queryParameters["from"],
+                to = call.request.queryParameters["to"],
+                feedbackId = call.request.queryParameters["feedbackId"],
+                deviceType = call.request.queryParameters["deviceType"]?.takeIf { it != "alle" }
+            )
+            
+            val stats = repository.getTopTasksStats(query)
+            call.respond(stats)
+        }
     }
 }
 
@@ -148,8 +166,8 @@ private fun calculateAverageRating(byRating: Map<String, Int>): Double? {
     
     if (numericRatings.isEmpty()) return null
     
-    val totalSum = numericRatings.sumOf { (rating, count) -> rating * count }
-    val totalCount = numericRatings.sumOf { (_, count) -> count }
+    val totalSum = numericRatings.map { it.first * it.second }.sum()
+    val totalCount = numericRatings.sumOf { it.second }
     
     return if (totalCount > 0) totalSum.toDouble() / totalCount else null
 }

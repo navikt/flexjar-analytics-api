@@ -17,6 +17,8 @@ import no.nav.flexjar.domain.FieldType
 import no.nav.flexjar.domain.Question
 import no.nav.flexjar.domain.StatsQuery
 import no.nav.flexjar.domain.SubmissionContext
+import no.nav.flexjar.domain.TopTaskStats
+import no.nav.flexjar.domain.TopTasksResponse
 import no.nav.flexjar.sensitive.SensitiveDataFilter
 import org.slf4j.LoggerFactory
 import java.sql.ResultSet
@@ -108,6 +110,28 @@ class FeedbackRepository(
         val params = buildStatsParams(query)
         
         val stats = mutableMapOf<String, Any>()
+        
+        // Detect surveyType (from latest feedback)
+        val surveyTypeSql = """
+            SELECT feedback_json::json->>'surveyType' as surveyType 
+            FROM feedback 
+            $whereClause 
+            ORDER BY opprettet DESC 
+            LIMIT 1
+        """.trimIndent()
+        
+        dataSource.connection.use { conn ->
+             conn.prepareStatement(surveyTypeSql).use { stmt ->
+                params.forEachIndexed { index, param ->
+                    stmt.setObject(index + 1, param)
+                }
+                stmt.executeQuery().use { rs ->
+                    if (rs.next()) {
+                        rs.getString("surveyType")?.let { stats["surveyType"] = it }
+                    }
+                }
+             }
+        }
         
         // Total count
         val countSql = "SELECT COUNT(*) FROM feedback $whereClause"
@@ -511,6 +535,118 @@ class FeedbackRepository(
         }
     }
     
+    fun getTopTasksStats(query: StatsQuery): TopTasksResponse {
+        val whereClause = buildStatsWhereClause(query)
+        val params = buildStatsParams(query)
+        
+        // Fetch all top tasks feedbacks for the period
+        // Note: checking for surveyType='topTasks' OR existence of 'task' answer for robustness
+        val sql = """
+            SELECT feedback_json 
+            FROM feedback 
+            $whereClause 
+            AND (
+                feedback_json::json->>'surveyType' = 'topTasks' 
+                OR feedback_json::json->'answers' @> '[{"fieldId":"task"}]'
+            )
+        """.trimIndent()
+        
+        val feedbacks = executeQuery(sql, params)
+        
+        val taskStatsMap = mutableMapOf<String, MutableMap<String, Int>>()
+        // task -> { total, success, partial, failure, blocker_... }
+        
+        var totalSubmissions = 0
+        
+        feedbacks.forEach { record ->
+            val jsonElement = try {
+                json.parseToJsonElement(record.feedbackJson)
+            } catch (e: Exception) {
+                return@forEach
+            }
+            
+            val jsonObj = jsonElement.jsonObject
+            val answers = jsonObj["answers"] as? kotlinx.serialization.json.JsonArray ?: return@forEach
+            
+            // Extract answers map for easier access
+            val answerMap = answers.associate { answerEl ->
+                val obj = answerEl.jsonObject
+                val id = obj["fieldId"]?.jsonPrimitive?.content ?: ""
+                val valObj = obj["value"]?.jsonObject
+                val value = valObj?.get("selectedOptionId")?.jsonPrimitive?.content 
+                         ?: valObj?.get("text")?.jsonPrimitive?.content 
+                         ?: ""
+                id to value
+            }
+            
+            val taskValue = answerMap["task"] ?: return@forEach // entry must have a task answer
+            val successValue = answerMap["taskSuccess"] // yes, partial, no
+            val blockerValue = answerMap["blocker"] // optional text
+            
+            totalSubmissions++
+            
+            val stats = taskStatsMap.getOrPut(taskValue) { 
+                mutableMapOf(
+                    "total" to 0, 
+                    "success" to 0, 
+                    "partial" to 0, 
+                    "failure" to 0
+                ) 
+            }
+            
+            stats["total"] = (stats["total"] ?: 0) + 1
+            
+            when (successValue) {
+                "yes" -> stats["success"] = (stats["success"] ?: 0) + 1
+                "partial" -> stats["partial"] = (stats["partial"] ?: 0) + 1
+                "no" -> stats["failure"] = (stats["failure"] ?: 0) + 1
+            }
+            
+             // Track blockers for failures/partials if present
+            if ((successValue == "no" || successValue == "partial") && !blockerValue.isNullOrBlank()) {
+                val blockerKey = "blocker_$blockerValue" // Naive grouping, ideally we'd normalize or just list them
+                // For now, let's just count specific text strings if we wanted, but likely we want a list of texts.
+                // The requirements say "blockerCounts". Aggregating free text is hard. 
+                // Let's assume for MVP we just count occurrences of the text string if it repeats, or ignore.
+                // Actually, "blockerPrompt" was free text. "blockerCounts" suggests categorization.
+                // If the user inputs free text, we can't easily count defined categories without AI or manual tagging.
+                // Let's attempt to count identical strings, or maybe we should just return list of blockers separately?
+                // The TopTaskStats model has `blockerCounts: Map<String, Int>`.
+                // Let's count the exact strings for now (e.g. if many people say "Login error").
+                stats[blockerKey] = (stats[blockerKey] ?: 0) + 1
+            }
+        }
+        
+        val taskStatsList = taskStatsMap.map { (task, stats) ->
+            val total = stats["total"] ?: 0
+            val success = stats["success"] ?: 0
+            val partial = stats["partial"] ?: 0
+            val failure = stats["failure"] ?: 0
+            
+            val successRate = if (total > 0) (success.toDouble() / total.toDouble()) else 0.0
+            val formattedRate = "${(successRate * 100).toInt()}%"
+            
+            val blockers = stats.filterKeys { it.startsWith("blocker_") }
+                .mapKeys { it.key.removePrefix("blocker_") }
+            
+            TopTaskStats(
+                task = task,
+                totalCount = total,
+                successCount = success,
+                partialCount = partial,
+                failureCount = failure,
+                successRate = successRate,
+                formattedSuccessRate = formattedRate,
+                blockerCounts = blockers
+            )
+        }.sortedByDescending { it.totalCount }
+        
+        return TopTasksResponse(
+            totalSubmissions = totalSubmissions,
+            tasks = taskStatsList
+        )
+    }
+
     private fun ResultSet.toFeedbackDbRecord(): FeedbackDbRecord {
         return FeedbackDbRecord(
             id = getString("id"),
@@ -535,6 +671,28 @@ class FeedbackRepository(
             ?: jsonObj["feedbackId"]?.jsonPrimitive?.content 
             ?: "unknown"
         val surveyVersion = jsonObj["surveyVersion"]?.jsonPrimitive?.contentOrNull
+        
+        val surveyTypeStr = jsonObj["surveyType"]?.jsonPrimitive?.contentOrNull
+        val surveyType = if (surveyTypeStr != null) {
+            try { no.nav.flexjar.domain.SurveyType.valueOf(surveyTypeStr.uppercase()) } catch (e: Exception) { no.nav.flexjar.domain.SurveyType.CUSTOM }
+        } else {
+            // infer from legacy data?
+            // If "svar" (rating) exists at top level payload (legacy) or in answers, it's RATING (mostly)
+            // But let's just null or Custom if not explicitly set.
+            // Actually implementation guide says "default to 'rating' if missing for legacy compatibility" or similar?
+            // Let's assume null for now, or CUSTOM.
+            // Wait, we defined SurveyType enum as RATING, TOP_TASKS, CUSTOM. 
+            // If we send "rating" from widget, valueOf("RATING") works?
+            // Widget sends "rating", "topTasks", "custom".
+            // valueOf requires exact match to Enum name (RATING, TOP_TASKS, CUSTOM).
+            // So we need to map "rating" -> RATING, "topTasks" -> TOP_TASKS.
+            when (surveyTypeStr) {
+                "rating" -> no.nav.flexjar.domain.SurveyType.RATING
+                "topTasks" -> no.nav.flexjar.domain.SurveyType.TOP_TASKS
+                "custom" -> no.nav.flexjar.domain.SurveyType.CUSTOM
+                else -> null
+            }
+        }
         
         // Parse context if present
         val context = jsonObj["context"]?.jsonObject?.let { ctxObj ->
@@ -625,6 +783,7 @@ class FeedbackRepository(
             app = app,
             surveyId = surveyId,
             surveyVersion = surveyVersion,
+            surveyType = surveyType,
             context = context,
             answers = answers,
             sensitiveDataRedacted = hasRedactions

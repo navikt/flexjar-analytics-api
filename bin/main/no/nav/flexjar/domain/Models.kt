@@ -17,6 +17,13 @@ data class FeedbackDbRecord(
     val tags: String?
 )
 
+@Serializable
+enum class SurveyType {
+    @SerialName("rating") RATING,
+    @SerialName("topTasks") TOP_TASKS,
+    @SerialName("custom") CUSTOM
+}
+
 // ============================================
 // Structured Answer Types (new format)
 // ============================================
@@ -108,6 +115,7 @@ data class FeedbackDto(
     val app: String?,
     val surveyId: String,
     val surveyVersion: String? = null,
+    val surveyType: SurveyType? = null,
     val context: SubmissionContext? = null,
     val answers: List<Answer>,
     val sensitiveDataRedacted: Boolean = false
@@ -161,6 +169,7 @@ data class FeedbackStats(
     val byFeedbackId: Map<String, Int>,
     val averageRating: Double?,
     val period: StatsPeriod,
+    val surveyType: SurveyType? = null,
     // New fields for analytics dashboard
     val ratingByDate: Map<String, RatingByDateEntry> = emptyMap(),
     val byDevice: Map<String, DeviceStats> = emptyMap(),
@@ -275,4 +284,26 @@ data class TimelineEntry(
 @Serializable
 data class TimelineResponse(
     val data: List<TimelineEntry>
+)
+
+// ============================================
+// Top Tasks Statistics
+// ============================================
+
+@Serializable
+data class TopTaskStats(
+    val task: String,
+    val totalCount: Int,
+    val successCount: Int,
+    val partialCount: Int,
+    val failureCount: Int,
+    val successRate: Double,
+    val formattedSuccessRate: String,
+    val blockerCounts: Map<String, Int> = emptyMap()
+)
+
+@Serializable
+data class TopTasksResponse(
+    val totalSubmissions: Int,
+    val tasks: List<TopTaskStats>
 )
