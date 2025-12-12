@@ -592,7 +592,30 @@ class FeedbackRepository(
                 id to value
             }
             
-            val taskValue = answerMap["task"] ?: return@forEach // entry must have a task answer
+            // Resolve Task ID to Label
+            // We need to look up the label for the selectedOptionId in the question options
+            val taskAnswerEl = answers.find { 
+                (it.jsonObject["fieldId"]?.jsonPrimitive?.content) == "task" 
+            }
+            
+            var taskLabel = "Ukjent oppgave"
+            val taskValue = answerMap["task"] ?: return@forEach
+
+            if (taskAnswerEl != null) {
+                val qObj = taskAnswerEl.jsonObject["question"]?.jsonObject
+                val options = qObj?.get("options") as? kotlinx.serialization.json.JsonArray
+                
+                val selectedOption = options?.map { it.jsonObject }?.find { 
+                    it["id"]?.jsonPrimitive?.content == taskValue 
+                }
+                
+                if (selectedOption != null) {
+                    taskLabel = selectedOption["label"]?.jsonPrimitive?.content ?: taskValue
+                } else {
+                    taskLabel = taskValue // Fallback to ID if not found
+                }
+            }
+            
             val successValue = answerMap["taskSuccess"] // yes, partial, no
             val blockerValue = answerMap["blocker"] // optional text
             
@@ -607,7 +630,8 @@ class FeedbackRepository(
             }
 
             // --- TASK STATS ---
-            val stats = taskStatsMap.getOrPut(taskValue) { 
+            // Use taskLabel as key, so we aggregate by name (e.g. "Søke om dagpenger") not ID
+            val stats = taskStatsMap.getOrPut(taskLabel) { 
                 mutableMapOf(
                     "total" to 0, 
                     "success" to 0, 
