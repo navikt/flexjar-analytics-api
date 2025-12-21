@@ -102,6 +102,12 @@ dependencies {
     testImplementation("no.nav.security:mock-oauth2-server:2.1.10")
 }
 
+java {
+    toolchain {
+        languageVersion.set(JavaLanguageVersion.of(21))
+    }
+}
+
 kotlin {
     compilerOptions {
         jvmTarget.set(JvmTarget.JVM_21)
