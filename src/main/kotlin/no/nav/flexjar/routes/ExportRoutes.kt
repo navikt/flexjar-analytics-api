@@ -11,6 +11,7 @@ import no.nav.flexjar.domain.ExportFormat
 import no.nav.flexjar.domain.FeedbackDto
 import no.nav.flexjar.domain.FeedbackQuery
 import no.nav.flexjar.domain.FieldType
+import no.nav.flexjar.domain.FILTER_ALL
 import no.nav.flexjar.repository.FeedbackRepository
 import org.apache.poi.xssf.usermodel.XSSFWorkbook
 import java.io.ByteArrayOutputStream
@@ -27,7 +28,7 @@ fun Route.exportRoutes(repository: FeedbackRepository = defaultFeedbackRepositor
         
         val query = FeedbackQuery(
             team = team,
-            app = params.app?.takeIf { it != "alle" },
+            app = params.app?.takeIf { it != FILTER_ALL },
             page = 0,
             size = 10000, // Max export size
             medTekst = params.medTekst ?: false,

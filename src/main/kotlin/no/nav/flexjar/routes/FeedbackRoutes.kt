@@ -10,6 +10,7 @@ import io.ktor.server.response.*
 import io.ktor.server.routing.*
 import no.nav.flexjar.domain.FeedbackPage
 import no.nav.flexjar.domain.FeedbackQuery
+import no.nav.flexjar.domain.FILTER_ALL
 import no.nav.flexjar.domain.TagInput
 import no.nav.flexjar.domain.TeamsAndApps
 import no.nav.flexjar.repository.FeedbackRepository
@@ -25,7 +26,7 @@ fun Route.feedbackRoutes(repository: FeedbackRepository = defaultFeedbackReposit
 
         val query = FeedbackQuery(
             team = team,
-            app = params.app?.takeIf { it != "alle" },
+            app = params.app?.takeIf { it != FILTER_ALL },
             page = params.page,
             size = params.size ?: 10,
             medTekst = params.medTekst ?: false,

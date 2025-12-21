@@ -14,6 +14,7 @@ import no.nav.flexjar.domain.RatingDistribution
 import no.nav.flexjar.domain.SurveyType
 import no.nav.flexjar.domain.TimelineEntry
 import no.nav.flexjar.domain.TimelineResponse
+import no.nav.flexjar.domain.FILTER_ALL
 import no.nav.flexjar.repository.FeedbackRepository
 import java.time.LocalDate
 import java.time.temporal.ChronoUnit
@@ -33,11 +34,11 @@ fun Route.statsRoutes(
 
         val query = StatsQuery(
             team = team,
-            app = params.app?.takeIf { it != "alle" },
+            app = params.app?.takeIf { it != FILTER_ALL },
             from = params.from,
             to = params.to,
             feedbackId = params.feedbackId,
-            deviceType = params.deviceType?.takeIf { it != "alle" }
+            deviceType = params.deviceType?.takeIf { it != FILTER_ALL }
         )
         
         val stats = statsRepository.getStats(query)
@@ -71,7 +72,7 @@ fun Route.statsRoutes(
         
         val query = StatsQuery(
             team = team,
-            app = params.parent.app?.takeIf { it != "alle" },
+            app = params.parent.app?.takeIf { it != FILTER_ALL },
             from = params.parent.from,
             to = params.parent.to,
             feedbackId = params.parent.feedbackId
@@ -92,7 +93,7 @@ fun Route.statsRoutes(
 
         val query = StatsQuery(
             team = team,
-            app = params.parent.app?.takeIf { it != "alle" },
+            app = params.parent.app?.takeIf { it != FILTER_ALL },
             from = params.parent.from,
             to = params.parent.to,
             feedbackId = params.parent.feedbackId
@@ -113,11 +114,11 @@ fun Route.statsRoutes(
 
         val query = StatsQuery(
             team = team,
-            app = params.parent.app?.takeIf { it != "alle" },
+            app = params.parent.app?.takeIf { it != FILTER_ALL },
             from = params.parent.from,
             to = params.parent.to,
             feedbackId = params.parent.feedbackId,
-            deviceType = params.parent.deviceType?.takeIf { it != "alle" }
+            deviceType = params.parent.deviceType?.takeIf { it != FILTER_ALL }
         )
         
         val stats = statsRepository.getTopTasksStats(query)

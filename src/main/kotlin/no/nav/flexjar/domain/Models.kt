@@ -6,6 +6,12 @@ import kotlinx.serialization.json.JsonObject
 import java.time.OffsetDateTime
 
 /**
+ * Value used by frontend to indicate "all" (no filter).
+ * When received as a query parameter, should be treated as null/unfiltered.
+ */
+const val FILTER_ALL = "alle"
+
+/**
  * Database record for feedback
  */
 data class FeedbackDbRecord(

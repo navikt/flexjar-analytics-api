@@ -137,7 +137,7 @@ class FeedbackRepository(
             dbQuery.andWhere { FeedbackTable.team eq query.team }
             
             query.app?.let { app ->
-                if (app != "alle") {
+                if (app != FILTER_ALL) {
                     dbQuery.andWhere { FeedbackTable.app eq app } 
                 }
             }
