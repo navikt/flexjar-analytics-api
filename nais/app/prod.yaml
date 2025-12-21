@@ -9,8 +9,8 @@ spec:
   image: {{image}}
   port: 8080
   replicas:
-    min: 1
-    max: 2
+    min: 2
+    max: 4
   liveness:
     path: /internal/isAlive
     initialDelay: 30
@@ -19,15 +19,15 @@ spec:
     initialDelay: 30
   resources:
     limits:
-      memory: 768Mi
+      memory: 1024Mi
     requests:
-      cpu: 100m
-      memory: 384Mi
+      cpu: 200m
+      memory: 512Mi
   azure:
     application:
       enabled: true
       allowAllUsers: true
-      tenant: trygdeetaten.no
+      tenant: nav.no
   accessPolicy:
     inbound:
       rules:
@@ -36,13 +36,14 @@ spec:
   gcp:
     sqlInstances:
       - type: POSTGRES_17
-        tier: db-f1-micro
+        tier: db-custom-1-3840
         diskAutoresize: true
+        highAvailability: false
         databases:
           - name: flexjar
             envVarPrefix: DB
   env:
     - name: NAIS_CLUSTER_NAME
-      value: dev-gcp
+      value: prod-gcp
     - name: FLEXJAR_ANALYTICS_CLIENT_ID
-      value: dev-gcp:team-esyfo:flexjar-analytics
+      value: prod-gcp:team-esyfo:flexjar-analytics
