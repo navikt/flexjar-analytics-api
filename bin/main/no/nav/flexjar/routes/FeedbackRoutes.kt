@@ -126,5 +126,21 @@ fun Route.feedbackRoutes(repository: FeedbackRepository = defaultFeedbackReposit
             val teamsAndApps = repository.findAllTeamsAndApps()
             call.respond(TeamsAndApps(teams = teamsAndApps))
         }
+        
+        // Get all metadata keys and values for a specific survey
+        // Used for building dynamic filter UI in analytics dashboard
+        get("/feedback/metadata-keys") {
+            val feedbackId = call.request.queryParameters["feedbackId"] ?: run {
+                call.respond(HttpStatusCode.BadRequest, mapOf("error" to "feedbackId parameter is required"))
+                return@get
+            }
+            val team = call.request.queryParameters["team"] ?: "flex"
+            
+            val metadataKeys = repository.findMetadataKeysForSurvey(feedbackId, team)
+            call.respond(mapOf(
+                "feedbackId" to feedbackId,
+                "metadataKeys" to metadataKeys
+            ))
+        }
     }
 }

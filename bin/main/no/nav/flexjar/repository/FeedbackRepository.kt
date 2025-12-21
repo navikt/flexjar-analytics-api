@@ -105,6 +105,40 @@ class FeedbackRepository(
         }
     }
     
+    /**
+     * Find all unique metadata keys and their distinct values for a given feedbackId (survey).
+     * Used for building dynamic filter UI in analytics dashboard.
+     */
+    fun findMetadataKeysForSurvey(feedbackId: String, team: String = "flex"): Map<String, Set<String>> {
+        // Query to extract all metadata keys and values from JSON
+        val sql = """
+            SELECT DISTINCT 
+                key as metadata_key,
+                feedback_json::json->'metadata'->>key as metadata_value
+            FROM feedback,
+                 jsonb_object_keys(feedback_json::jsonb->'metadata') as key
+            WHERE team = ?
+              AND feedback_json::json->>'feedbackId' = ?
+              AND feedback_json::json->'metadata' IS NOT NULL
+        """.trimIndent()
+        
+        return dataSource.connection.use { conn ->
+            conn.prepareStatement(sql).use { stmt ->
+                stmt.setString(1, team)
+                stmt.setString(2, feedbackId)
+                stmt.executeQuery().use { rs ->
+                    val result = mutableMapOf<String, MutableSet<String>>()
+                    while (rs.next()) {
+                        val key = rs.getString("metadata_key") ?: continue
+                        val value = rs.getString("metadata_value") ?: continue
+                        result.getOrPut(key) { mutableSetOf() }.add(value)
+                    }
+                    result
+                }
+            }
+        }
+    }
+    
     fun getStats(query: StatsQuery): Map<String, Any> {
         val whereClause = buildStatsWhereClause(query)
         val params = buildStatsParams(query)
@@ -741,6 +775,11 @@ class FeedbackRepository(
             )
         }
         
+        // Parse metadata if present (custom key-value pairs for segmentation)
+        val metadata = jsonObj["metadata"]?.jsonObject?.entries?.associate { (key, value) ->
+            key to (value.jsonPrimitive.contentOrNull ?: value.toString())
+        }
+        
         val answersJson = jsonObj["answers"] as? kotlinx.serialization.json.JsonArray 
             ?: return createEmptyDto()
         
@@ -820,6 +859,7 @@ class FeedbackRepository(
             surveyVersion = surveyVersion,
             surveyType = surveyType,
             context = context,
+            metadata = metadata,
             answers = answers,
             sensitiveDataRedacted = hasRedactions
         )

@@ -117,6 +117,8 @@ data class FeedbackDto(
     val surveyVersion: String? = null,
     val surveyType: SurveyType? = null,
     val context: SubmissionContext? = null,
+    /** Custom metadata for segmentation/filtering in analytics */
+    val metadata: Map<String, String>? = null,
     val answers: List<Answer>,
     val sensitiveDataRedacted: Boolean = false
 )
