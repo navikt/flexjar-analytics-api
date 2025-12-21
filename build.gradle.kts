@@ -38,6 +38,8 @@ val kotestVersion = "5.9.1"
 val mockkVersion = "1.13.13"
 val testcontainersVersion = "1.20.4"
 val tokenSupportVersion = "5.0.13"
+val exposedVersion = "0.56.0"
+val micrometerVersion = "1.14.2"
 
 dependencies {
     // Ktor Server
@@ -57,6 +59,13 @@ dependencies {
     implementation("io.ktor:ktor-client-core:$ktorVersion")
     implementation("io.ktor:ktor-client-cio:$ktorVersion")
     implementation("io.ktor:ktor-client-content-negotiation:$ktorVersion")
+
+    // Resources
+    implementation("io.ktor:ktor-server-resources:$ktorVersion")
+
+    // Explorer / Metrics
+    implementation("io.ktor:ktor-server-metrics-micrometer:$ktorVersion")
+    implementation("io.micrometer:micrometer-registry-prometheus:$micrometerVersion")
     
     // Serialization
     implementation("io.ktor:ktor-serialization-kotlinx-json:$ktorVersion")
@@ -69,6 +78,11 @@ dependencies {
     implementation("com.zaxxer:HikariCP:$hikariVersion")
     implementation("org.flywaydb:flyway-core:$flywayVersion")
     implementation("org.flywaydb:flyway-database-postgresql:$flywayVersion")
+
+    // Exposed
+    implementation("org.jetbrains.exposed:exposed-core:$exposedVersion")
+    implementation("org.jetbrains.exposed:exposed-jdbc:$exposedVersion")
+    implementation("org.jetbrains.exposed:exposed-java-time:$exposedVersion")
     
     // Logging
     implementation("ch.qos.logback:logback-classic:$logbackVersion")

@@ -1,5 +1,7 @@
 package no.nav.flexjar.routes
 
+import io.ktor.http.*
+import io.ktor.server.resources.get
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
 import no.nav.flexjar.domain.DeviceStats
@@ -8,154 +10,118 @@ import no.nav.flexjar.domain.PathnameStats
 import no.nav.flexjar.domain.RatingByDateEntry
 import no.nav.flexjar.domain.StatsPeriod
 import no.nav.flexjar.domain.StatsQuery
+import no.nav.flexjar.domain.RatingDistribution
+import no.nav.flexjar.domain.SurveyType
+import no.nav.flexjar.domain.TimelineEntry
+import no.nav.flexjar.domain.TimelineResponse
 import no.nav.flexjar.repository.FeedbackRepository
 import java.time.LocalDate
 import java.time.temporal.ChronoUnit
 
+import no.nav.flexjar.repository.FeedbackStatsRepository
+
 private val defaultFeedbackRepository = FeedbackRepository()
+private val defaultStatsRepository = FeedbackStatsRepository()
 
-fun Route.statsRoutes(repository: FeedbackRepository = defaultFeedbackRepository) {
-    route("/api/v1/intern/stats") {
-        // Get statistics for feedback
-        get {
-            val query = StatsQuery(
-                team = call.request.queryParameters["team"] ?: "flex",
-                app = call.request.queryParameters["app"]?.takeIf { it != "alle" },
-                from = call.request.queryParameters["from"],
-                to = call.request.queryParameters["to"],
-                feedbackId = call.request.queryParameters["feedbackId"],
-                deviceType = call.request.queryParameters["deviceType"]?.takeIf { it != "alle" }
-            )
-            
-            val stats = repository.getStats(query)
-            
-            @Suppress("UNCHECKED_CAST")
-            val byRating = stats["byRating"] as? Map<String, Int> ?: emptyMap()
-            
-            // Calculate average rating if ratings are numeric
-            val averageRating = calculateAverageRating(byRating)
-            
-            // Calculate period days
-            val days = calculateDays(query.from, query.to)
-            
-            // Parse new aggregations
-            @Suppress("UNCHECKED_CAST")
-            val ratingByDateRaw = stats["ratingByDate"] as? Map<String, Map<String, Any>> ?: emptyMap()
-            val ratingByDate = ratingByDateRaw.mapValues { (_, v) ->
-                RatingByDateEntry(
-                    average = (v["average"] as? Number)?.toDouble() ?: 0.0,
-                    count = (v["count"] as? Number)?.toInt() ?: 0
-                )
-            }
-            
-            @Suppress("UNCHECKED_CAST")
-            val byDeviceRaw = stats["byDevice"] as? Map<String, Map<String, Any>> ?: emptyMap()
-            val byDevice = byDeviceRaw.mapValues { (_, v) ->
-                DeviceStats(
-                    count = (v["count"] as? Number)?.toInt() ?: 0,
-                    averageRating = (v["averageRating"] as? Number)?.toDouble() ?: 0.0
-                )
-            }
-            
-            val byPathnameRaw = stats["byPathname"] as? Map<String, Map<String, Any>> ?: emptyMap()
-            val byPathname = byPathnameRaw.mapValues { (_, v) ->
-                PathnameStats(
-                    count = (v["count"] as? Number)?.toInt() ?: 0,
-                    averageRating = (v["averageRating"] as? Number)?.toDouble() ?: 0.0
-                )
-            }
+fun Route.statsRoutes(
+    repository: FeedbackRepository = defaultFeedbackRepository,
+    statsRepository: FeedbackStatsRepository = defaultStatsRepository
+) {
+    // Get statistics for feedback
+    get<ApiV1Intern.Stats> { params ->
+        val team = params.team ?: return@get call.respond(HttpStatusCode.BadRequest, "Missing team parameter")
 
-            @Suppress("UNCHECKED_CAST")
-            val lowestRatingPathsRaw = stats["lowestRatingPaths"] as? Map<String, Map<String, Any>> ?: emptyMap()
-            val lowestRatingPaths = lowestRatingPathsRaw.mapValues { (_, v) ->
-                PathnameStats(
-                    count = (v["count"] as? Number)?.toInt() ?: 0,
-                    averageRating = (v["averageRating"] as? Number)?.toDouble() ?: 0.0
-                )
-            }
-            
-            call.respond(FeedbackStats(
-                totalCount = (stats["totalCount"] as? Long)?.toInt() ?: 0,
-                countWithText = (stats["countWithText"] as? Long)?.toInt() ?: 0,
-                countWithoutText = ((stats["totalCount"] as? Long)?.toInt() ?: 0) - ((stats["countWithText"] as? Long)?.toInt() ?: 0),
-                byRating = byRating,
-                byApp = stats["byApp"] as? Map<String, Int> ?: emptyMap(),
-                byDate = stats["byDate"] as? Map<String, Int> ?: emptyMap(),
-                byFeedbackId = stats["byFeedbackId"] as? Map<String, Int> ?: emptyMap(),
-                averageRating = averageRating,
-                period = StatsPeriod(
-                    from = query.from,
-                    to = query.to,
-                    days = days
-                ),
-                surveyType = (stats["surveyType"] as? String)?.let { 
-                    try { no.nav.flexjar.domain.SurveyType.valueOf(it.uppercase()) } catch(e: Exception) { no.nav.flexjar.domain.SurveyType.CUSTOM }
-                },
-                ratingByDate = ratingByDate,
-                byDevice = byDevice,
-                byPathname = byPathname,
-                lowestRatingPaths = lowestRatingPaths
-            ))
-        }
+        val query = StatsQuery(
+            team = team,
+            app = params.app?.takeIf { it != "alle" },
+            from = params.from,
+            to = params.to,
+            feedbackId = params.feedbackId,
+            deviceType = params.deviceType?.takeIf { it != "alle" }
+        )
         
-        // Get rating distribution
-        get("/ratings") {
-            val query = StatsQuery(
-                team = call.request.queryParameters["team"] ?: "flex",
-                app = call.request.queryParameters["app"]?.takeIf { it != "alle" },
-                from = call.request.queryParameters["from"],
-                to = call.request.queryParameters["to"],
-                feedbackId = call.request.queryParameters["feedbackId"]
-            )
-            
-            val stats = repository.getStats(query)
-            
-            @Suppress("UNCHECKED_CAST")
-            val byRating = stats["byRating"] as? Map<String, Int> ?: emptyMap()
-            
-            call.respond(no.nav.flexjar.domain.RatingDistribution(
-                distribution = byRating,
-                average = calculateAverageRating(byRating),
-                total = byRating.values.sum()
-            ))
-        }
+        val stats = statsRepository.getStats(query)
         
-        // Get timeline data
-        get("/timeline") {
-            val query = StatsQuery(
-                team = call.request.queryParameters["team"] ?: "flex",
-                app = call.request.queryParameters["app"]?.takeIf { it != "alle" },
-                from = call.request.queryParameters["from"],
-                to = call.request.queryParameters["to"],
-                feedbackId = call.request.queryParameters["feedbackId"]
-            )
-            
-            val stats = repository.getStats(query)
-            
-            @Suppress("UNCHECKED_CAST")
-            val byDate = stats["byDate"] as? Map<String, Int> ?: emptyMap()
-            
-            call.respond(no.nav.flexjar.domain.TimelineResponse(
-                data = byDate.map { (date, count) ->
-                    no.nav.flexjar.domain.TimelineEntry(date = date, count = count)
-                }.sortedBy { it.date }
-            ))
-        }
+        val averageRating = calculateAverageRating(stats.byRating)
+        val days = calculateDays(query.from, query.to)
+        
+        call.respond(FeedbackStats(
+            totalCount = stats.totalCount.toInt(),
+            countWithText = stats.countWithText.toInt(),
+            countWithoutText = (stats.totalCount - stats.countWithText).toInt(),
+            byRating = stats.byRating,
+            byApp = stats.byApp,
+            byDate = stats.byDate,
+            byFeedbackId = stats.byFeedbackId,
+            averageRating = averageRating,
+            period = StatsPeriod(
+                from = query.from,
+                to = query.to,
+                days = days
+            ),
+            surveyType = stats.surveyType?.let { 
+                try { SurveyType.valueOf(it.uppercase()) } catch(e: Exception) { SurveyType.CUSTOM }
+            }
+        ))
+    }
+    
+    // Get rating distribution
+    get<ApiV1Intern.Stats.Ratings> { params ->
+        val team = params.parent.team ?: return@get call.respond(HttpStatusCode.BadRequest, "Missing team parameter")
+        
+        val query = StatsQuery(
+            team = team,
+            app = params.parent.app?.takeIf { it != "alle" },
+            from = params.parent.from,
+            to = params.parent.to,
+            feedbackId = params.parent.feedbackId
+        )
+        
+        val stats = statsRepository.getStats(query)
+        
+        call.respond(RatingDistribution(
+            distribution = stats.byRating,
+            average = calculateAverageRating(stats.byRating),
+            total = stats.byRating.values.sum()
+        ))
+    }
+    
+    // Get timeline data
+    get<ApiV1Intern.Stats.Timeline> { params ->
+        val team = params.parent.team ?: return@get call.respond(HttpStatusCode.BadRequest, "Missing team parameter")
 
-        // Get Top Tasks statistics
-        get("/top-tasks") {
-            val query = StatsQuery(
-                team = call.request.queryParameters["team"] ?: "flex",
-                app = call.request.queryParameters["app"]?.takeIf { it != "alle" },
-                from = call.request.queryParameters["from"],
-                to = call.request.queryParameters["to"],
-                feedbackId = call.request.queryParameters["feedbackId"],
-                deviceType = call.request.queryParameters["deviceType"]?.takeIf { it != "alle" }
-            )
-            
-            val stats = repository.getTopTasksStats(query)
-            call.respond(stats)
-        }
+        val query = StatsQuery(
+            team = team,
+            app = params.parent.app?.takeIf { it != "alle" },
+            from = params.parent.from,
+            to = params.parent.to,
+            feedbackId = params.parent.feedbackId
+        )
+        
+        val stats = statsRepository.getStats(query)
+        
+        call.respond(TimelineResponse(
+            data = stats.byDate.map { (date, count) ->
+                TimelineEntry(date = date, count = count)
+            }.sortedBy { it.date }
+        ))
+    }
+
+    // Get Top Tasks statistics
+    get<ApiV1Intern.Stats.TopTasks> { params ->
+        val team = params.parent.team ?: return@get call.respond(HttpStatusCode.BadRequest, "Missing team parameter")
+
+        val query = StatsQuery(
+            team = team,
+            app = params.parent.app?.takeIf { it != "alle" },
+            from = params.parent.from,
+            to = params.parent.to,
+            feedbackId = params.parent.feedbackId,
+            deviceType = params.parent.deviceType?.takeIf { it != "alle" }
+        )
+        
+        val stats = statsRepository.getTopTasksStats(query)
+        call.respond(stats)
     }
 }
 

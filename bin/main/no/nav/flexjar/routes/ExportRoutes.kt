@@ -1,6 +1,7 @@
 package no.nav.flexjar.routes
 
 import io.ktor.http.*
+import io.ktor.server.resources.get
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
 import kotlinx.serialization.encodeToString
@@ -18,34 +19,32 @@ private val defaultFeedbackRepository = FeedbackRepository()
 private val json = Json { prettyPrint = true }
 
 fun Route.exportRoutes(repository: FeedbackRepository = defaultFeedbackRepository) {
-    route("/api/v1/intern/export") {
-        // Export feedback data
-        get {
-            val format = call.request.queryParameters["format"]?.uppercase()?.let {
-                try { ExportFormat.valueOf(it) } catch (e: Exception) { null }
-            } ?: ExportFormat.CSV
-            
-            val query = FeedbackQuery(
-                team = call.request.queryParameters["team"] ?: "flex",
-                app = call.request.queryParameters["app"]?.takeIf { it != "alle" },
-                page = 0,
-                size = 10000, // Max export size
-                medTekst = call.request.queryParameters["medTekst"]?.toBoolean() ?: false,
-                stjerne = call.request.queryParameters["stjerne"]?.toBoolean() ?: false,
-                tags = call.request.queryParameters["tags"]?.split(",")?.filter { it.isNotBlank() } ?: emptyList(),
-                fritekst = call.request.queryParameters["fritekst"]?.split(" ")?.filter { it.isNotBlank() } ?: emptyList(),
-                from = call.request.queryParameters["from"],
-                to = call.request.queryParameters["to"],
-                feedbackId = call.request.queryParameters["feedbackId"]
-            )
-            
-            val (content, _, _) = repository.findPaginated(query)
-            
-            when (format) {
-                ExportFormat.CSV -> exportCsv(call, content)
-                ExportFormat.JSON -> exportJson(call, content)
-                ExportFormat.EXCEL -> exportExcel(call, content)
-            }
+    // Export feedback data
+    get<ApiV1Intern.Export> { params ->
+        val format = try { ExportFormat.valueOf(params.format.uppercase()) } catch (e: Exception) { ExportFormat.CSV }
+        
+        val team = params.team ?: return@get call.respond(HttpStatusCode.BadRequest, "Missing team parameter")
+        
+        val query = FeedbackQuery(
+            team = team,
+            app = params.app?.takeIf { it != "alle" },
+            page = 0,
+            size = 10000, // Max export size
+            medTekst = params.medTekst ?: false,
+            stjerne = params.stjerne ?: false,
+            tags = params.tags?.split(",")?.filter { it.isNotBlank() } ?: emptyList(),
+            fritekst = params.fritekst?.split(" ")?.filter { it.isNotBlank() } ?: emptyList(),
+            from = params.from,
+            to = params.to,
+            feedbackId = params.feedbackId
+        )
+        
+        val (content, _, _) = repository.findPaginated(query)
+        
+        when (format) {
+            ExportFormat.CSV -> exportCsv(call, content)
+            ExportFormat.JSON -> exportJson(call, content)
+            ExportFormat.EXCEL -> exportExcel(call, content)
         }
     }
 }
@@ -136,5 +135,4 @@ private fun String.escapeCsv(): String {
     }
 }
 
-private val ContentType.Application.Xlsx: ContentType
-    get() = ContentType("application", "vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+

@@ -194,15 +194,5 @@ class FeedbackRepositoryTest : FunSpec({
         }
     }
 
-    context("getStats") {
-        test("returns correct statistics") {
-            insertTestFeedback(team = "flex", svar = 4)
-            insertTestFeedback(team = "flex", svar = 5)
-            insertTestFeedback(team = "flex", svar = 5)
-            
-            val stats = repository.getStats(StatsQuery(team = "flex"))
-            
-            stats["totalCount"] shouldBe 3L
-        }
-    }
+
 })

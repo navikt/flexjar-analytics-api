@@ -11,6 +11,7 @@ import no.nav.flexjar.routes.internalRoutes
 import no.nav.flexjar.routes.submissionRoutes
 
 fun Application.configureRouting() {
+    install(io.ktor.server.resources.Resources)
     routing {
         // Health checks - no auth
         internalRoutes()

@@ -15,8 +15,7 @@ fun Route.internalRoutes() {
         }
         
         get("/prometheus") {
-            // TODO: Add prometheus metrics
-            call.respondText("", ContentType.Text.Plain)
+            call.respondText(no.nav.flexjar.config.appMicrometerRegistry.scrape(), ContentType.parse(io.micrometer.prometheusmetrics.PrometheusConfig.DEFAULT.get("contentType") ?: "text/plain; version=0.0.4; charset=utf-8"))
         }
     }
 }

@@ -1,6 +1,6 @@
 # Flexjar Analytics API – AI Coding Guide
 
-Ktor backend for Flexjar survey analytics with PostgreSQL storage.
+Ktor 3.x backend for Flexjar survey analytics with PostgreSQL storage.
 
 ## Architecture
 
@@ -8,22 +8,34 @@ Ktor backend for Flexjar survey analytics with PostgreSQL storage.
 src/main/kotlin/no/nav/flexjar/
 ├── Application.kt        # Entry point, Ktor module setup
 ├── config/
-│   ├── configureAuth.kt      # Azure AD / TokenX via nav-token-support
-│   ├── configureDatabase.kt  # HikariCP + Flyway
-│   ├── configureRouting.kt   # Route registration
-│   └── configureSerialization.kt
-├── domain/               # DTOs and domain models
-├── repository/           # Database queries (raw SQL, no ORM)
+│   ├── Auth.kt               # Azure AD / TokenX via nav-token-support
+│   ├── Database.kt           # HikariCP + Flyway + Exposed
+│   ├── Routing.kt            # Route registration + Ktor Resources
+│   ├── Metrics.kt            # Micrometer + Prometheus
+│   └── Serialization.kt
+├── domain/
+│   └── Models.kt             # DTOs, query types, FeedbackStatsResult
+├── repository/
+│   ├── FeedbackTable.kt      # Exposed Table definition + JsonExtract/DateDate helpers
+│   ├── FeedbackRepository.kt # CRUD operations (Exposed DSL)
+│   ├── FeedbackStatsRepository.kt # Stats/analytics queries (Exposed DSL)
+│   └── Extensions.kt         # ResultRow.toDto() extension functions
 ├── routes/
+│   ├── Resources.kt          # Ktor Resources (type-safe routing)
 │   ├── SubmissionRoutes.kt   # POST feedback from widget
 │   ├── FeedbackRoutes.kt     # GET/DELETE for dashboard
 │   ├── StatsRoutes.kt        # Aggregations, timeline
 │   ├── ExportRoutes.kt       # CSV/JSON/Excel
-│   └── InternalRoutes.kt     # Health checks
+│   └── InternalRoutes.kt     # Health checks + /internal/prometheus
 └── sensitive/
     ├── SensitiveDataFilter.kt    # Redaction logic
     └── SensitiveDataPatterns.kt  # Regex patterns for PII
 ```
+
+### Key Technologies
+- **Exposed 0.56+**: DSL-based type-safe SQL (no DAO layer)
+- **Ktor Resources**: Type-safe routing with `@Resource` annotated classes
+- **Micrometer + Prometheus**: Metrics exposed at `/internal/prometheus`
 
 ### Key Concepts
 - **Sensitive data filtering**: All text responses pass through `SensitiveDataFilter.redact()` before API response

@@ -262,6 +262,19 @@ data class StatsQuery(
 )
 
 /**
+ * Internal result from FeedbackStatsRepository - typed for safety
+ */
+data class FeedbackStatsResult(
+    val totalCount: Long,
+    val countWithText: Long,
+    val surveyType: String?,
+    val byRating: Map<String, Int>,
+    val byApp: Map<String, Int>,
+    val byDate: Map<String, Int>,
+    val byFeedbackId: Map<String, Int>
+)
+
+/**
  * Export format options
  */
 enum class ExportFormat {

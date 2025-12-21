@@ -14,6 +14,10 @@ import no.nav.flexjar.testModule
 
 class ExportRoutesTest : FunSpec({
 
+    beforeSpec {
+        TestDatabase.initialize()
+    }
+
     beforeTest {
         TestDatabase.clearAllData()
     }

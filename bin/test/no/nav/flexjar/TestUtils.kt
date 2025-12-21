@@ -17,6 +17,7 @@ import no.nav.flexjar.routes.feedbackRoutes
 import no.nav.flexjar.routes.internalRoutes
 import no.nav.flexjar.routes.statsRoutes
 import no.nav.flexjar.routes.exportRoutes
+import no.nav.flexjar.repository.FeedbackStatsRepository
 import java.time.OffsetDateTime
 import java.util.UUID
 
@@ -83,7 +84,8 @@ fun insertTestFeedback(
  * Test application module with authentication bypassed
  */
 fun Application.testModule(
-    feedbackRepository: FeedbackRepository = FeedbackRepository()
+    feedbackRepository: FeedbackRepository = FeedbackRepository(),
+    statsRepository: FeedbackStatsRepository = FeedbackStatsRepository()
 ) {
     // Initialize test database
     setDataSourceForTesting(TestDatabase.dataSource)
@@ -91,6 +93,7 @@ fun Application.testModule(
     
     configureSerialization()
     configureStatusPages()
+    install(io.ktor.server.resources.Resources)
     
     // Test auth that creates a BrukerPrincipal from any "Bearer" token
     install(Authentication) {
@@ -113,8 +116,9 @@ fun Application.testModule(
         internalRoutes()
         authenticate("test-azure") {
             feedbackRoutes(feedbackRepository)
-            statsRoutes(feedbackRepository)
+            statsRoutes(feedbackRepository, statsRepository)
             exportRoutes(feedbackRepository)
         }
     }
 }
+

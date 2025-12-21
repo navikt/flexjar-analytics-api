@@ -5,6 +5,7 @@ import io.ktor.server.engine.*
 import io.ktor.server.netty.*
 import no.nav.flexjar.config.configureAuth
 import no.nav.flexjar.config.configureDatabase
+import no.nav.flexjar.config.configureMetrics
 import no.nav.flexjar.config.configureOpenApi
 import no.nav.flexjar.config.configureRouting
 import no.nav.flexjar.config.configureSerialization
@@ -27,5 +28,6 @@ fun Application.module() {
     configureAuth()
     configureDatabase()
     configureOpenApi()
+    configureMetrics()
     configureRouting()
 }

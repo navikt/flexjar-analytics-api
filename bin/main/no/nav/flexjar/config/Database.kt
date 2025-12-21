@@ -4,6 +4,7 @@ import com.zaxxer.hikari.HikariConfig
 import com.zaxxer.hikari.HikariDataSource
 import io.ktor.server.application.*
 import org.flywaydb.core.Flyway
+import org.jetbrains.exposed.sql.Database
 import org.slf4j.LoggerFactory
 import javax.sql.DataSource
 
@@ -20,6 +21,8 @@ fun Application.configureDatabase() {
     dataSource = createDataSource(dbConfig)
     
     runMigrations(dataSource)
+    
+    Database.connect(dataSource)
     
     log.info("Database configured successfully")
 }

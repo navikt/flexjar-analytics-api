@@ -15,6 +15,10 @@ import java.util.UUID
 
 class FeedbackRoutesTest : FunSpec({
 
+    beforeSpec {
+        TestDatabase.initialize()
+    }
+
     beforeTest {
         TestDatabase.clearAllData()
     }
