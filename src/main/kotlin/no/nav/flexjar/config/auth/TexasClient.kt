@@ -35,6 +35,7 @@ class TexasClient(
      * Introspect a token using the Texas sidecar.
      * Returns the introspection result with claims if valid, or null if invalid.
      */
+    suspend fun introspect(token: String): TexasIntrospectionResult? {
         return try {
             log.info("Introspecting token with Texas: $introspectionEndpoint")
             val response = client.post(introspectionEndpoint) {
