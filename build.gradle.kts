@@ -4,6 +4,7 @@ plugins {
     kotlin("jvm") version "2.1.0"
     kotlin("plugin.serialization") version "2.1.0"
     id("io.ktor.plugin") version "3.0.2"
+    id("com.gradleup.shadow") version "8.3.9"
     application
 }
 
@@ -12,12 +13,6 @@ version = "1.0.0"
 
 application {
     mainClass.set("no.nav.flexjar.ApplicationKt")
-}
-
-ktor {
-    fatJar {
-        archiveFileName.set("app.jar")
-    }
 }
 
 repositories {
@@ -113,4 +108,13 @@ kotlin {
 
 tasks.withType<Test>().configureEach {
     useJUnitPlatform()
+}
+
+tasks {
+    shadowJar {
+        mergeServiceFiles()
+        archiveFileName.set("app.jar")
+        archiveClassifier.set("")
+        archiveVersion.set("")
+    }
 }
