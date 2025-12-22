@@ -78,7 +78,11 @@ data class DatabaseConfig(
             val username = System.getenv("DB_USERNAME") ?: "flexjar"
             val password = System.getenv("DB_PASSWORD") ?: "flexjar"
             
-            val jdbcUrl = "jdbc:postgresql://$host:$port/$database"
+            // Cloud SQL requires SSL - use sslmode=require for GCP
+            val isCloudSql = System.getenv("DB_HOST")?.contains("cloud") == true || 
+                             System.getenv("NAIS_CLUSTER_NAME") != null
+            val sslParam = if (isCloudSql) "?sslmode=require" else ""
+            val jdbcUrl = "jdbc:postgresql://$host:$port/$database$sslParam"
             
             return DatabaseConfig(
                 jdbcUrl = jdbcUrl,
