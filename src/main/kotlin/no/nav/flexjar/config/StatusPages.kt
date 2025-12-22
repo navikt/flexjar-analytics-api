@@ -23,18 +23,21 @@ fun Application.configureStatusPages() {
         
         status(HttpStatusCode.Forbidden) { call, status ->
             val path = call.request.path()
+            statusPageLog.warn("StatusPages caught 403 Forbidden on $path - responding with ApiError")
             val apiError = ApiError.forbidden(status.description, path)
             call.respond(HttpStatusCode.Forbidden, apiError)
         }
         
         status(HttpStatusCode.Unauthorized) { call, status ->
             val path = call.request.path()
+            statusPageLog.warn("StatusPages caught 401 Unauthorized on $path - responding with ApiError")
             val apiError = ApiError.unauthorized(status.description, path)
             call.respond(HttpStatusCode.Unauthorized, apiError)
         }
         
         status(HttpStatusCode.NotFound) { call, status ->
             val path = call.request.path()
+            statusPageLog.info("StatusPages caught 404 NotFound on $path - responding with ApiError")
             val apiError = ApiError.notFound(status.description, path)
             call.respond(HttpStatusCode.NotFound, apiError)
         }

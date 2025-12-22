@@ -28,6 +28,17 @@ fun Application.configureAuth() {
     
     if (authEnabled) {
         logger.info("Authentication enabled using NAIS Texas sidecar")
+        
+        // Debug logging for Authorization header presence
+        intercept(ApplicationCallPipeline.Plugins) {
+            val header = call.request.header(HttpHeaders.Authorization)
+            if (header != null) {
+                logger.info("Request received with Authorization header (length: ${header.length}). Path: ${call.request.uri}")
+            } else {
+                logger.warn("Request received WITHOUT Authorization header. Path: ${call.request.uri}")
+            }
+        }
+
         install(Authentication) {
             bearer(AZURE_REALM) {
                 realm = "flexjar-analytics-api"
