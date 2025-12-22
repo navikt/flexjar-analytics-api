@@ -68,6 +68,10 @@ class ApiV1Intern {
         class TopTasks(val parent: Stats)
     }
 
+    @Resource("surveys")
+    @Serializable
+    class Surveys(val parent: ApiV1Intern = ApiV1Intern())
+
     @Resource("export")
     @Serializable
     class Export(

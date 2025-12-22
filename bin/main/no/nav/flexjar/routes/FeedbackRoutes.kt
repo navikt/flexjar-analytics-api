@@ -122,4 +122,10 @@ fun Route.feedbackRoutes(repository: FeedbackRepository = defaultFeedbackReposit
             "metadataKeys" to metadataKeys
         ))
     }
+
+    // Get all surveys (grouped by app)
+    get<ApiV1Intern.Surveys> {
+        val teamsAndApps = repository.findAllTeamsAndApps()
+        call.respond(teamsAndApps)
+    }
 }

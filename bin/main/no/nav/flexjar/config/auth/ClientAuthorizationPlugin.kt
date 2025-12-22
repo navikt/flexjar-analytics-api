@@ -28,7 +28,7 @@ val ClientAuthorizationPlugin = createRouteScopedPlugin(
     
     log.info("ClientAuthorizationPlugin initialized with allowedClients: $allowedClients")
     
-    onCall { call ->
+    on(AuthenticationChecked) { call ->
         call.requireClient(allowedClients)
     }
 }
