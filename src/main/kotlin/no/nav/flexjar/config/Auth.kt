@@ -102,12 +102,16 @@ private fun validateTokenWithTexas(token: String): BrukerPrincipal? {
             return@runBlocking null
         }
         
+        // Log the groups for debugging
+        val groups = result.groups ?: emptyList()
+        logger.info("Token validated for user ${result.NAVident}. Groups in token: $groups (count: ${groups.size})")
+        
         BrukerPrincipal(
             navIdent = result.NAVident,
             name = result.name,
             token = token,
             clientId = result.azp_name,
-            groups = result.groups ?: emptyList()
+            groups = groups
         )
     }
 }
