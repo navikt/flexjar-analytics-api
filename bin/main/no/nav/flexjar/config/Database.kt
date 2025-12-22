@@ -98,12 +98,12 @@ fun createDataSource(config: ServerEnv.DatabaseEnv): HikariDataSource {
 fun runMigrations(dataSource: DataSource) {
     log.info("Running database migrations...")
     
-    Flyway.configure()
+    val result = Flyway.configure()
         .dataSource(dataSource)
         .locations("classpath:db/migration")
         .baselineOnMigrate(true)
         .load()
         .migrate()
     
-    log.info("Database migrations completed")
+    log.info("Database migrations completed. Executed ${result.migrationsExecuted} migrations.")
 }

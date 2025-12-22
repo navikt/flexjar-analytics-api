@@ -1,15 +1,13 @@
 -- Initial schema - matches existing flexjar-backend
 -- This allows us to use the same database
 
-CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
-
 CREATE TABLE IF NOT EXISTS feedback
 (
-    id            VARCHAR DEFAULT uuid_generate_v4() PRIMARY KEY,
-    opprettet     TIMESTAMP WITH TIME ZONE,
+    id            VARCHAR DEFAULT gen_random_uuid() PRIMARY KEY,
+    opprettet     TIMESTAMP WITH TIME ZONE NOT NULL,
     feedback_json TEXT NOT NULL,
-    team          VARCHAR(255) DEFAULT 'flex',
-    app           VARCHAR(255) NULL,
+    team          VARCHAR(255) NOT NULL,
+    app           VARCHAR(255) NOT NULL,
     tags          TEXT NULL
 );
 
