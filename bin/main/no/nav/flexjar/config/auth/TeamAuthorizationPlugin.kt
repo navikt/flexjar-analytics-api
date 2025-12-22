@@ -27,13 +27,13 @@ private val log = LoggerFactory.getLogger("TeamAuthorizationPlugin")
  */
 val TeamAuthorizationPlugin = createRouteScopedPlugin("TeamAuthorization") {
     
-    onCall { call ->
+    on(AuthenticationChecked) { call ->
         val principal = call.principal<BrukerPrincipal>()
         
         if (principal == null) {
             log.warn("TeamAuthorization: No principal found")
             call.respond(HttpStatusCode.Unauthorized, "Not authenticated")
-            return@onCall
+            return@on
         }
         
         val authorizedTeams = principal.getAuthorizedTeams()
@@ -44,7 +44,7 @@ val TeamAuthorizationPlugin = createRouteScopedPlugin("TeamAuthorization") {
                 "error" to "NO_TEAM_ACCESS",
                 "message" to "You are not authorized for any teams"
             ))
-            return@onCall
+            return@on
         }
         
         // Get requested team from query parameter
@@ -59,7 +59,7 @@ val TeamAuthorizationPlugin = createRouteScopedPlugin("TeamAuthorization") {
                 "error" to "TEAM_NOT_AUTHORIZED",
                 "message" to "You are not authorized for team: $requestedTeam"
             ))
-            return@onCall
+            return@on
         } else {
             principal.getPrimaryTeam()!!
         }
