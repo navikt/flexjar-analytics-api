@@ -35,8 +35,8 @@ class TexasClient(
      * Introspect a token using the Texas sidecar.
      * Returns the introspection result with claims if valid, or null if invalid.
      */
-    suspend fun introspect(token: String): TexasIntrospectionResult? {
         return try {
+            log.info("Introspecting token with Texas: $introspectionEndpoint")
             val response = client.post(introspectionEndpoint) {
                 contentType(ContentType.Application.Json)
                 setBody(TexasIntrospectionRequest(
@@ -45,10 +45,17 @@ class TexasClient(
                 ))
             }
             
+            if (response.status != HttpStatusCode.OK) {
+                log.error("Texas introspection failed with status: ${response.status}")
+                val body = response.body<String>()
+                log.error("Response body: $body")
+                return null
+            }
+
             val result = response.body<TexasIntrospectionResult>()
             
             if (!result.active) {
-                log.warn("Token validation failed - token is not active")
+                log.warn("Token validation failed - token is not active. Claims: $result")
                 return null
             }
             
