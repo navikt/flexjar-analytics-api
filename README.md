@@ -72,6 +72,58 @@ docker run -d --name flexjar-db \
 | `POST /api/azure/v2/feedback` | Azure variant |
 | `PUT /api/azure/v2/feedback/{id}` | Azure update |
 
+## 🔐 Security & Access
+
+This API follows NAIS Zero Trust principles. Both parties must configure access policies.
+
+### For Teams Wanting to Submit Feedback
+
+To submit feedback from your application, you need:
+
+#### 1. Request Access (Our Side)
+
+Open an issue in this repository using the **"Request API Access"** template, or create a PR adding your app to our NAIS config:
+
+```yaml
+# In nais/app/dev.yaml and nais/app/prod.yaml
+spec:
+  azure:
+    application:
+      accessPolicy:
+        inbound:
+          rules:
+            - application: your-app-name
+              namespace: your-team
+```
+
+#### 2. Configure Outbound (Your Side)
+
+Add `flexjar-analytics-api` to your app's outbound access policy:
+
+```yaml
+# In your app's nais.yaml
+spec:
+  accessPolicy:
+    outbound:
+      rules:
+        - application: flexjar-analytics-api
+          namespace: team-esyfo
+```
+
+#### 3. Get Azure AD Token
+
+Your app must obtain an Azure AD token targeting `flexjar-analytics-api` and include it in requests:
+
+```
+Authorization: Bearer <token>
+```
+
+The token's `azp_name` claim identifies your app and determines which team the feedback belongs to.
+
+### For Analytics Dashboard Access
+
+The analytics dashboard (`flexjar-analytics`) requires Azure AD authentication with the `NAVident` claim. Only authorized NAV employees can access the analytics data.
+
 ## Sensitive Data Filtering
 
 The API automatically redacts sensitive data from feedback text:

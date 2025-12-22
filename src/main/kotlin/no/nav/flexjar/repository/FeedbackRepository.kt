@@ -29,6 +29,27 @@ class FeedbackRepository(
                 ?.toDto()
         }
     }
+    
+    /**
+     * Get raw database record for ownership verification.
+     * Returns team and app for the given feedback ID.
+     */
+    fun findRawById(id: String): FeedbackDbRecord? {
+        return transaction {
+            FeedbackTable.selectAll().where { FeedbackTable.id eq id }
+                .singleOrNull()
+                ?.let {
+                    FeedbackDbRecord(
+                        id = it[FeedbackTable.id],
+                        opprettet = OffsetDateTime.ofInstant(it[FeedbackTable.opprettet], java.time.ZoneOffset.UTC),
+                        feedbackJson = it[FeedbackTable.feedbackJson],
+                        team = it[FeedbackTable.team],
+                        app = it[FeedbackTable.app],
+                        tags = it[FeedbackTable.tags]
+                    )
+                }
+        }
+    }
 
     fun save(feedbackJson: String, team: String, app: String?): String {
         val id = UUID.randomUUID().toString()
