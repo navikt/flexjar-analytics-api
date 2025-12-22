@@ -1,11 +1,14 @@
 package no.nav.flexjar.config
 
 import com.auth0.jwt.JWT
+import io.ktor.http.*
 import io.ktor.server.application.*
 import io.ktor.server.auth.*
+import io.ktor.server.request.*
+import io.ktor.server.response.*
+import kotlinx.coroutines.runBlocking
 import no.nav.flexjar.config.auth.BrukerPrincipal
-import no.nav.security.token.support.v3.TokenValidationContextPrincipal
-import no.nav.security.token.support.v3.tokenValidationSupport
+import no.nav.flexjar.config.auth.TexasClient
 import org.slf4j.LoggerFactory
 
 private val log = LoggerFactory.getLogger("Auth")
@@ -15,15 +18,21 @@ const val AZURE_REALM = "azure"
 // Environment variables for allowed client IDs
 const val FLEXJAR_ANALYTICS_CLIENT_ID_ENV = "FLEXJAR_ANALYTICS_CLIENT_ID"
 
+// Texas client instance (lazy initialized)
+private val texasClient by lazy { TexasClient() }
+
 fun Application.configureAuth() {
     val authEnabled = !isDev()
     
     if (authEnabled) {
+        log.info("Authentication enabled using NAIS Texas sidecar")
         install(Authentication) {
-            tokenValidationSupport(
-                name = AZURE_REALM,
-                config = this@configureAuth.environment.config
-            )
+            bearer(AZURE_REALM) {
+                realm = "flexjar-analytics-api"
+                authenticate { tokenCredential ->
+                    validateTokenWithTexas(tokenCredential.token)
+                }
+            }
         }
     } else {
         log.warn("Authentication is DISABLED - running in local/test mode")
@@ -47,33 +56,41 @@ fun Application.configureAuth() {
 }
 
 /**
- * Extension to extract BrukerPrincipal from the token validation context.
+ * Validate token using NAIS Texas sidecar introspection endpoint.
+ */
+private fun validateTokenWithTexas(token: String): BrukerPrincipal? {
+    return runBlocking {
+        val result = texasClient.introspect(token)
+        
+        if (result == null) {
+            log.warn("Token validation failed - introspection returned null")
+            return@runBlocking null
+        }
+        
+        BrukerPrincipal(
+            navIdent = result.NAVident,
+            name = result.name,
+            token = token,
+            clientId = result.azp_name
+        )
+    }
+}
+
+/**
+ * Extension to extract BrukerPrincipal from the authentication context.
  * Call this in authenticated routes to get the current user.
  */
 fun ApplicationCall.getBrukerPrincipal(): BrukerPrincipal? {
-    // First check if it's a BrukerPrincipal (local dev mode)
-    principal<BrukerPrincipal>()?.let { return it }
-    
-    // Otherwise, extract from TokenValidationContextPrincipal (prod mode)
-    val tokenContext = principal<TokenValidationContextPrincipal>()?.context ?: return null
-    val jwtToken = tokenContext.getJwtToken(AZURE_REALM) ?: return null
-    val claims = jwtToken.jwtTokenClaims
-    
-    return BrukerPrincipal(
-        navIdent = claims.getStringClaim("NAVident"),
-        name = claims.getStringClaim("name"),
-        token = jwtToken.encodedToken,
-        clientId = claims.getStringClaim("azp_name")
-    )
+    return principal<BrukerPrincipal>()
 }
 
 /**
  * Get the allowed client ID for flexjar-analytics frontend.
- * Format: "cluster:namespace:app" e.g. "dev-gcp:flex:flexjar-analytics"
+ * Format: "cluster:namespace:app" e.g. "dev-gcp:team-esyfo:flexjar-analytics"
  */
 fun getFlexjarAnalyticsClientId(): String {
     return System.getenv(FLEXJAR_ANALYTICS_CLIENT_ID_ENV)
-        ?: "${getClusterName()}:flex:flexjar-analytics"
+        ?: "${getClusterName()}:team-esyfo:flexjar-analytics"
 }
 
 fun getClusterName(): String = System.getenv("NAIS_CLUSTER_NAME") ?: "dev-gcp"
@@ -91,7 +108,7 @@ data class CallerIdentity(
 
 /**
  * Extract caller identity from the principal's clientId (azp_name claim).
- * The clientId format is "cluster:namespace:app", e.g. "dev-gcp:flex:flexjar-analytics"
+ * The clientId format is "cluster:namespace:app", e.g. "dev-gcp:team-esyfo:flexjar-analytics"
  */
 fun extractCallerIdentityFromPrincipal(principal: BrukerPrincipal): CallerIdentity? {
     return try {

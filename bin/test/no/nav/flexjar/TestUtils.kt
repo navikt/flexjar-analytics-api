@@ -105,7 +105,7 @@ fun Application.testModule(
                         navIdent = "A123456",
                         name = "Test User",
                         token = tokenCredential.token,
-                        clientId = "dev-gcp:flexjar:flexjar-analytics"
+                        clientId = "dev-gcp:team-esyfo:flexjar-analytics"
                     )
                 } else null
             }

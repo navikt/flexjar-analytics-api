@@ -70,9 +70,6 @@ dependencies {
     // Serialization
     implementation("io.ktor:ktor-serialization-kotlinx-json:$ktorVersion")
     
-    // NAV Token Support
-    implementation("no.nav.security:token-validation-ktor-v3:$tokenSupportVersion")
-    
     // Database
     implementation("org.postgresql:postgresql:$postgresVersion")
     implementation("com.zaxxer:HikariCP:$hikariVersion")
