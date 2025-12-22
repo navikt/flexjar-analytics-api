@@ -29,13 +29,19 @@ fun Application.configureAuth() {
     if (authEnabled) {
         logger.info("Authentication enabled using NAIS Texas sidecar")
         
-        // Debug logging for Authorization header presence
+        // Debug logging for Authorization header presence (skip internal endpoints)
         intercept(ApplicationCallPipeline.Plugins) {
+            val path = call.request.uri
+            // Skip logging for health check endpoints
+            if (path.startsWith("/internal/")) {
+                return@intercept
+            }
+            
             val header = call.request.header(HttpHeaders.Authorization)
             if (header != null) {
-                logger.info("Request received with Authorization header (length: ${header.length}). Path: ${call.request.uri}")
+                logger.info("Request received with Authorization header (length: ${header.length}). Path: $path")
             } else {
-                logger.warn("Request received WITHOUT Authorization header. Path: ${call.request.uri}")
+                logger.warn("Request received WITHOUT Authorization header. Path: $path")
             }
         }
 
@@ -70,7 +76,12 @@ fun Application.configureAuth() {
                             navIdent = "Z999999",
                             name = "Lokal Utvikler",
                             token = "mock-token",
-                            clientId = env.auth.flexjarAnalyticsClientId
+                            clientId = env.auth.flexjarAnalyticsClientId,
+                            // Include both groups for local development
+                            groups = listOf(
+                                "5066bb56-7f19-4b49-ae48-f1ba66abf546", // isyfo
+                                "ef4e9824-6f3a-4933-8f40-6edf5233d4d2"  // esyfo
+                            )
                         )
                     } else null
                 }
@@ -95,7 +106,8 @@ private fun validateTokenWithTexas(token: String): BrukerPrincipal? {
             navIdent = result.NAVident,
             name = result.name,
             token = token,
-            clientId = result.azp_name
+            clientId = result.azp_name,
+            groups = result.groups ?: emptyList()
         )
     }
 }

@@ -6,5 +6,7 @@ data class BrukerPrincipal(
     val navIdent: String?,
     val name: String?,
     val token: String,
-    val clientId: String?
+    val clientId: String?,
+    /** AD group UUIDs the user belongs to */
+    val groups: List<String> = emptyList()
 ) : Principal

@@ -4,6 +4,7 @@ import io.ktor.http.*
 import io.ktor.server.resources.get
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
+import no.nav.flexjar.config.auth.authorizedTeam
 import no.nav.flexjar.domain.DeviceStats
 import no.nav.flexjar.domain.FeedbackStats
 import no.nav.flexjar.domain.PathnameStats
@@ -30,7 +31,8 @@ fun Route.statsRoutes(
 ) {
     // Get statistics for feedback
     get<ApiV1Intern.Stats> { params ->
-        val team = params.team ?: return@get call.respond(HttpStatusCode.BadRequest, "Missing team parameter")
+        // Team is already validated by TeamAuthorizationPlugin
+        val team = call.authorizedTeam
 
         val query = StatsQuery(
             team = team,
@@ -68,7 +70,7 @@ fun Route.statsRoutes(
     
     // Get rating distribution
     get<ApiV1Intern.Stats.Ratings> { params ->
-        val team = params.parent.team ?: return@get call.respond(HttpStatusCode.BadRequest, "Missing team parameter")
+        val team = call.authorizedTeam
         
         val query = StatsQuery(
             team = team,
@@ -89,7 +91,7 @@ fun Route.statsRoutes(
     
     // Get timeline data
     get<ApiV1Intern.Stats.Timeline> { params ->
-        val team = params.parent.team ?: return@get call.respond(HttpStatusCode.BadRequest, "Missing team parameter")
+        val team = call.authorizedTeam
 
         val query = StatsQuery(
             team = team,
@@ -110,7 +112,7 @@ fun Route.statsRoutes(
 
     // Get Top Tasks statistics
     get<ApiV1Intern.Stats.TopTasks> { params ->
-        val team = params.parent.team ?: return@get call.respond(HttpStatusCode.BadRequest, "Missing team parameter")
+        val team = call.authorizedTeam
 
         val query = StatsQuery(
             team = team,

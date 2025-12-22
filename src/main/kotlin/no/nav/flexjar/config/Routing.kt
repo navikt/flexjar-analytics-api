@@ -4,6 +4,7 @@ import io.ktor.server.application.*
 import io.ktor.server.auth.*
 import io.ktor.server.routing.*
 import no.nav.flexjar.config.auth.ClientAuthorizationPlugin
+import no.nav.flexjar.config.auth.TeamAuthorizationPlugin
 import no.nav.flexjar.routes.feedbackRoutes
 import no.nav.flexjar.routes.exportRoutes
 import no.nav.flexjar.routes.statsRoutes
@@ -25,6 +26,9 @@ fun Application.configureRouting() {
             install(ClientAuthorizationPlugin) {
                 allowedClientId = getFlexjarAnalyticsClientId()
             }
+            
+            // Enforce team authorization based on user's AD groups
+            install(TeamAuthorizationPlugin)
             
             feedbackRoutes()
             statsRoutes()

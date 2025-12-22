@@ -8,6 +8,7 @@ import io.ktor.server.resources.put
 import io.ktor.server.resources.delete
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
+import no.nav.flexjar.config.auth.authorizedTeam
 import no.nav.flexjar.domain.FeedbackPage
 import no.nav.flexjar.domain.FeedbackQuery
 import no.nav.flexjar.domain.FILTER_ALL
@@ -22,7 +23,8 @@ private val defaultFeedbackRepository = FeedbackRepository()
 fun Route.feedbackRoutes(repository: FeedbackRepository = defaultFeedbackRepository) {
     // List feedback with pagination and filters
     get<ApiV1Intern.Feedback> { params ->
-        val team = params.team ?: return@get call.respond(HttpStatusCode.BadRequest, "Missing team parameter")
+        // Team is already validated by TeamAuthorizationPlugin
+        val team = call.authorizedTeam
 
         val query = FeedbackQuery(
             team = team,

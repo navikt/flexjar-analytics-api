@@ -96,5 +96,7 @@ data class TexasIntrospectionResult(
     /** NAV employee identifier */
     val NAVident: String? = null,
     /** User's display name */
-    val name: String? = null
+    val name: String? = null,
+    /** AD group UUIDs the user belongs to */
+    val groups: List<String>? = null
 )

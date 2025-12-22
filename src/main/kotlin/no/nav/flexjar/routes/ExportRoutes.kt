@@ -6,6 +6,7 @@ import io.ktor.server.response.*
 import io.ktor.server.routing.*
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
+import no.nav.flexjar.config.auth.authorizedTeam
 import no.nav.flexjar.domain.AnswerValue
 import no.nav.flexjar.domain.ExportFormat
 import no.nav.flexjar.domain.FeedbackDto
@@ -22,9 +23,10 @@ private val json = Json { prettyPrint = true }
 fun Route.exportRoutes(repository: FeedbackRepository = defaultFeedbackRepository) {
     // Export feedback data
     get<ApiV1Intern.Export> { params ->
-        val format = try { ExportFormat.valueOf(params.format.uppercase()) } catch (e: Exception) { ExportFormat.CSV }
+        // Team is already validated by TeamAuthorizationPlugin
+        val team = call.authorizedTeam
         
-        val team = params.team ?: return@get call.respond(HttpStatusCode.BadRequest, "Missing team parameter")
+        val format = try { ExportFormat.valueOf(params.format.uppercase()) } catch (e: Exception) { ExportFormat.CSV }
         
         val query = FeedbackQuery(
             team = team,
