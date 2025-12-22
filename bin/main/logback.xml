@@ -1,7 +1,31 @@
 <configuration>
     <!-- JSON logging for NAIS/Grafana -->
     <appender name="stdout_json" class="ch.qos.logback.core.ConsoleAppender">
-        <encoder class="net.logstash.logback.encoder.LogstashEncoder" />
+        <encoder class="net.logstash.logback.encoder.LogstashEncoder">
+            <includeContext>true</includeContext>
+            <includeMdc>true</includeMdc>
+            <includeCallerData>false</includeCallerData>
+            <includeStructuredArguments>true</includeStructuredArguments>
+            
+            <!-- Ensure message field is always present -->
+            <fieldNames>
+                <timestamp>timestamp</timestamp>
+                <message>message</message>
+                <logger>logger</logger>
+                <thread>thread</thread>
+                <level>level</level>
+                <levelValue>[ignore]</levelValue>
+            </fieldNames>
+            
+            <!-- Add provider info -->
+            <provider class="net.logstash.logback.composite.loggingevent.LoggingEventPatternJsonProvider">
+                <pattern>
+                    {
+                        "service": "flexjar-analytics-api"
+                    }
+                </pattern>
+            </provider>
+        </encoder>
     </appender>
 
     <root level="INFO">

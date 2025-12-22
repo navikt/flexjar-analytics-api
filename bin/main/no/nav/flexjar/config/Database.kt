@@ -98,12 +98,40 @@ fun createDataSource(config: ServerEnv.DatabaseEnv): HikariDataSource {
 fun runMigrations(dataSource: DataSource) {
     log.info("Running database migrations...")
     
-    val result = Flyway.configure()
-        .dataSource(dataSource)
-        .locations("classpath:db/migration")
-        .baselineOnMigrate(true)
-        .load()
-        .migrate()
-    
-    log.info("Database migrations completed. Executed ${result.migrationsExecuted} migrations.")
+    try {
+        val flyway = Flyway.configure()
+            .dataSource(dataSource)
+            .locations("classpath:db/migration")
+            .baselineOnMigrate(true)
+            .load()
+        
+        // Log current migration info
+        val info = flyway.info()
+        log.info("Flyway info - Current version: ${info.current()?.version ?: "NONE"}")
+        log.info("Flyway info - Pending migrations: ${info.pending().size}")
+        info.pending().forEach { pending ->
+            log.info("  Pending: ${pending.version} - ${pending.description}")
+        }
+        
+        // Execute migrations
+        val result = flyway.migrate()
+        
+        log.info("Database migrations completed successfully!")
+        log.info("  Migrations executed: ${result.migrationsExecuted}")
+        log.info("  Target schema version: ${result.targetSchemaVersion ?: "NONE"}")
+        log.info("  Success: ${result.success}")
+        
+        // Verify table exists
+        dataSource.connection.use { conn ->
+            val rs = conn.metaData.getTables(null, null, "feedback", null)
+            if (rs.next()) {
+                log.info("✓ Verified 'feedback' table exists in database")
+            } else {
+                log.error("✗ ERROR: 'feedback' table does NOT exist after migration!")
+            }
+        }
+    } catch (e: Exception) {
+        log.error("Failed to run database migrations", e)
+        throw e
+    }
 }

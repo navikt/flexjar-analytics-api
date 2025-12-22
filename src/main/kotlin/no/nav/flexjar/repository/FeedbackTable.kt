@@ -14,10 +14,10 @@ import java.time.LocalDate
 object FeedbackTable : Table("feedback") {
     val id = varchar("id", 255)
     val opprettet = timestamp("opprettet")
-    val feedbackJson = text("feedback_json") // Storing as text for simplicity, could be jsonb
+    val feedbackJson = text("feedback_json")
     val team = varchar("team", 255)
-    val app = varchar("app", 255).nullable()
-    val tags = varchar("tags", 255).nullable()
+    val app = varchar("app", 255)
+    val tags = text("tags").nullable()
 
     override val primaryKey = PrimaryKey(id)
 }
