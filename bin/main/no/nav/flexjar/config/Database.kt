@@ -99,6 +99,7 @@ fun runMigrations(dataSource: DataSource) {
     log.info("Running database migrations...")
     
     try {
+        // First try to run migrations the normal way
         log.info("Attempting to load migrations from classpath:db/migration")
         
         // Check if resources exist
@@ -118,21 +119,20 @@ fun runMigrations(dataSource: DataSource) {
         log.info("Flyway info - All migrations count: ${info.all().size}")
         log.info("Flyway info - Pending migrations: ${info.pending().size}")
         
-        info.all().forEach { migration ->
-            log.info("  Found migration: ${migration.version} - ${migration.description} - State: ${migration.state}")
+        // If Flyway found migrations, run them
+        if (info.all().isNotEmpty()) {
+            info.all().forEach { migration ->
+                log.info("  Found migration: ${migration.version} - ${migration.description} - State: ${migration.state}")
+            }
+            
+            val result = flyway.migrate()
+            log.info("Database migrations completed!")
+            log.info("  Migrations executed: ${result.migrationsExecuted}")
+        } else {
+            // Flyway 11 classpath bug workaround: execute SQL directly
+            log.warn("Flyway found no migrations (known Flyway 11 bug #4183). Applying manual fallback...")
+            applyMigrationManually(dataSource)
         }
-        
-        info.pending().forEach { pending ->
-            log.info("  Pending: ${pending.version} - ${pending.description}")
-        }
-        
-        // Execute migrations
-        val result = flyway.migrate()
-        
-        log.info("Database migrations completed successfully!")
-        log.info("  Migrations executed: ${result.migrationsExecuted}")
-        log.info("  Target schema version: ${result.targetSchemaVersion ?: "NONE"}")
-        log.info("  Success: ${result.success}")
         
         // Verify table exists
         dataSource.connection.use { conn ->
@@ -146,5 +146,44 @@ fun runMigrations(dataSource: DataSource) {
     } catch (e: Exception) {
         log.error("Failed to run database migrations", e)
         throw e
+    }
+}
+
+/**
+ * Manual fallback for Flyway 11 classpath bug.
+ * Executes the initial schema SQL directly.
+ */
+private fun applyMigrationManually(dataSource: DataSource) {
+    val sqlResource = Thread.currentThread().contextClassLoader
+        .getResourceAsStream("db/migration/V1__Initial_schema.sql")
+    
+    if (sqlResource == null) {
+        log.error("Could not find V1__Initial_schema.sql in classpath!")
+        return
+    }
+    
+    val sql = sqlResource.bufferedReader().use { it.readText() }
+    log.info("Executing manual migration SQL (${sql.length} chars)...")
+    
+    dataSource.connection.use { conn ->
+        conn.autoCommit = false
+        try {
+            conn.createStatement().use { stmt ->
+                // Split by semicolons and execute each statement
+                sql.split(";")
+                    .map { it.trim() }
+                    .filter { it.isNotBlank() && !it.startsWith("--") }
+                    .forEach { statement ->
+                        log.info("  Executing: ${statement.take(60)}...")
+                        stmt.execute(statement)
+                    }
+            }
+            conn.commit()
+            log.info("Manual migration completed successfully!")
+        } catch (e: Exception) {
+            conn.rollback()
+            log.error("Manual migration failed, rolled back", e)
+            throw e
+        }
     }
 }
