@@ -7,6 +7,7 @@ import io.ktor.client.plugins.contentnegotiation.*
 import io.ktor.client.request.*
 import io.ktor.http.*
 import io.ktor.serialization.kotlinx.json.*
+import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import org.slf4j.LoggerFactory
@@ -27,6 +28,7 @@ class TexasClient(
             json(Json {
                 ignoreUnknownKeys = true
                 isLenient = true
+                encodeDefaults = true
             })
         }
     }
@@ -41,7 +43,7 @@ class TexasClient(
             val response = client.post(introspectionEndpoint) {
                 contentType(ContentType.Application.Json)
                 setBody(TexasIntrospectionRequest(
-                    identityProvider = "entra_id",
+                    identityProvider = "azuread",
                     token = token
                 ))
             }
@@ -74,7 +76,9 @@ class TexasClient(
 
 @Serializable
 data class TexasIntrospectionRequest(
+    @SerialName("identity_provider")
     val identityProvider: String,
+    @SerialName("token")
     val token: String
 )
 
