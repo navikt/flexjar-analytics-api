@@ -105,7 +105,7 @@ fun runMigrations(dataSource: DataSource) {
             .dataSource(dataSource)
             .locations("classpath:db/migration")
             .baselineOnMigrate(true)
-            .validateMigrationNaming(true)  // Fail fast on invalid filenames
+            .validateMigrationNaming(false)  // Disable strict naming validation
             .load()
         
         // Log current migration info
