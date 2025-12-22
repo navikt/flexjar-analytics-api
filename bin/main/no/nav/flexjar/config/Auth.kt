@@ -32,7 +32,18 @@ fun Application.configureAuth() {
             bearer(AZURE_REALM) {
                 realm = "flexjar-analytics-api"
                 authenticate { tokenCredential ->
-                    validateTokenWithTexas(tokenCredential.token)
+                    log.info("Incoming request to protected route. Token length: ${tokenCredential.token.length}")
+                    val start = System.currentTimeMillis()
+                    val principal = validateTokenWithTexas(tokenCredential.token)
+                    val duration = System.currentTimeMillis() - start
+                    
+                    if (principal == null) {
+                        log.error("Authentication failed: validateTokenWithTexas returned null after ${duration}ms")
+                    } else {
+                        log.info("Authentication succeeded: User=${principal.navIdent}, Client=${principal.clientId} after ${duration}ms")
+                    }
+                    
+                    principal
                 }
             }
         }
