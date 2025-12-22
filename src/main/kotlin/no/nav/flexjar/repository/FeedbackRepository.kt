@@ -51,7 +51,7 @@ class FeedbackRepository(
         }
     }
 
-    fun save(feedbackJson: String, team: String, app: String?): String {
+    fun save(feedbackJson: String, team: String, app: String): String {
         val id = UUID.randomUUID().toString()
         transaction {
             FeedbackTable.insert {
