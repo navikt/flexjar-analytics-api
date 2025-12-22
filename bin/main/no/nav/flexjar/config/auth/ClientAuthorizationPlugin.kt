@@ -26,15 +26,26 @@ val ClientAuthorizationPlugin = createRouteScopedPlugin(
         listOf(clientId, "dev-gcp:nais:tokenx-token-generator", "dev-gcp:nais:azure-token-generator")
     }
     
+    log.info("ClientAuthorizationPlugin initialized with allowedClients: $allowedClients")
+    
     onCall { call ->
         call.requireClient(allowedClients)
     }
 }
 
 private fun ApplicationCall.requireClient(allowedClients: List<String>) {
-    // With Texas, the BrukerPrincipal is now always set by the bearer auth
-    val callerClientId = principal<BrukerPrincipal>()?.clientId
-        ?: throw ApiErrorException.UnauthorizedException("Missing client identity in token")
+    val principal = principal<BrukerPrincipal>()
+    
+    if (principal == null) {
+        log.error("No BrukerPrincipal found in request to ${request.uri}")
+        throw ApiErrorException.UnauthorizedException("Missing authentication principal")
+    }
+    
+    val callerClientId = principal.clientId
+    if (callerClientId == null) {
+        log.error("BrukerPrincipal has null clientId. NAVident=${principal.navIdent}, name=${principal.name}, path=${request.uri}")
+        throw ApiErrorException.UnauthorizedException("Missing client identity (azp_name) in token")
+    }
     
     if (!allowedClients.contains(callerClientId)) {
         log.error(
@@ -42,4 +53,7 @@ private fun ApplicationCall.requireClient(allowedClients: List<String>) {
         )
         throw ApiErrorException.ForbiddenException("Caller is not authorized for this endpoint")
     }
+    
+    log.debug("Client authorized: $callerClientId for ${request.uri}")
 }
+
