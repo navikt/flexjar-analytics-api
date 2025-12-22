@@ -101,11 +101,15 @@ fun runMigrations(dataSource: DataSource) {
     try {
         log.info("Attempting to load migrations from classpath:db/migration")
         
+        // Check if resources exist
+        val resourceUrl = Thread.currentThread().contextClassLoader.getResource("db/migration")
+        log.info("Migration resource URL: $resourceUrl")
+        
         val flyway = Flyway.configure()
             .dataSource(dataSource)
             .locations("classpath:db/migration")
             .baselineOnMigrate(true)
-            .validateMigrationNaming(false)  // Disable strict naming validation
+            .validateMigrationNaming(false)
             .load()
         
         // Log current migration info
