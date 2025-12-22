@@ -11,7 +11,7 @@ import no.nav.flexjar.config.auth.BrukerPrincipal
 import no.nav.flexjar.config.auth.TexasClient
 import org.slf4j.LoggerFactory
 
-private val log = LoggerFactory.getLogger("Auth")
+private val logger = LoggerFactory.getLogger("Auth")
 
 const val AZURE_REALM = "azure"
 
@@ -27,20 +27,20 @@ fun Application.configureAuth() {
     val authEnabled = env.nais.isNais
     
     if (authEnabled) {
-        log.info("Authentication enabled using NAIS Texas sidecar")
+        logger.info("Authentication enabled using NAIS Texas sidecar")
         install(Authentication) {
             bearer(AZURE_REALM) {
                 realm = "flexjar-analytics-api"
                 authenticate { tokenCredential ->
-                    log.info("Incoming request to protected route. Token length: ${tokenCredential.token.length}")
+                    logger.info("Incoming request to protected route. Token length: ${tokenCredential.token.length}")
                     val start = System.currentTimeMillis()
                     val principal = validateTokenWithTexas(tokenCredential.token)
                     val duration = System.currentTimeMillis() - start
                     
                     if (principal == null) {
-                        log.error("Authentication failed: validateTokenWithTexas returned null after ${duration}ms")
+                        logger.error("Authentication failed: validateTokenWithTexas returned null after ${duration}ms")
                     } else {
-                        log.info("Authentication succeeded: User=${principal.navIdent}, Client=${principal.clientId} after ${duration}ms")
+                        logger.info("Authentication succeeded: User=${principal.navIdent}, Client=${principal.clientId} after ${duration}ms")
                     }
                     
                     principal
@@ -48,7 +48,7 @@ fun Application.configureAuth() {
             }
         }
     } else {
-        log.warn("Authentication is DISABLED - running in local/test mode")
+        logger.warn("Authentication is DISABLED - running in local/test mode")
         install(Authentication) {
             bearer(AZURE_REALM) {
                 realm = "flexjar-analytics-test"
@@ -76,7 +76,7 @@ private fun validateTokenWithTexas(token: String): BrukerPrincipal? {
         val result = texasClient.introspect(token)
         
         if (result == null) {
-            log.warn("Token validation failed - introspection returned null")
+            logger.warn("Token validation failed - introspection returned null")
             return@runBlocking null
         }
         
@@ -133,7 +133,7 @@ fun extractCallerIdentityFromPrincipal(principal: BrukerPrincipal): CallerIdenti
             name = principal.name
         )
     } catch (e: Exception) {
-        log.error("Failed to extract caller identity from principal", e)
+        logger.error("Failed to extract caller identity from principal", e)
         null
     }
 }
@@ -156,7 +156,7 @@ fun extractCallerIdentity(token: String): CallerIdentity? {
             name = decoded.getClaim("name")?.asString()
         )
     } catch (e: Exception) {
-        log.error("Failed to extract caller identity from token", e)
+        logger.error("Failed to extract caller identity from token", e)
         null
     }
 }
