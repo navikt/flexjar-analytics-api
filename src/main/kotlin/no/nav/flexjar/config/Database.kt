@@ -99,16 +99,25 @@ fun runMigrations(dataSource: DataSource) {
     log.info("Running database migrations...")
     
     try {
+        log.info("Attempting to load migrations from classpath:db/migration")
+        
         val flyway = Flyway.configure()
             .dataSource(dataSource)
             .locations("classpath:db/migration")
             .baselineOnMigrate(true)
+            .validateMigrationNaming(true)  // Fail fast on invalid filenames
             .load()
         
         // Log current migration info
         val info = flyway.info()
         log.info("Flyway info - Current version: ${info.current()?.version ?: "NONE"}")
+        log.info("Flyway info - All migrations count: ${info.all().size}")
         log.info("Flyway info - Pending migrations: ${info.pending().size}")
+        
+        info.all().forEach { migration ->
+            log.info("  Found migration: ${migration.version} - ${migration.description} - State: ${migration.state}")
+        }
+        
         info.pending().forEach { pending ->
             log.info("  Pending: ${pending.version} - ${pending.description}")
         }
