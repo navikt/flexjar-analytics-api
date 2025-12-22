@@ -32,7 +32,6 @@ spec:
     inbound:
       rules:
         - application: flexjar-analytics
-        - application: flexjar-frontend
   gcp:
     sqlInstances:
       - type: POSTGRES_17
