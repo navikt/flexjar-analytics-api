@@ -16,10 +16,11 @@ private val log = LoggerFactory.getLogger("TexasClient")
 /**
  * Client for NAIS Texas sidecar - Token Exchange as a Service.
  * Uses the introspection endpoint to validate tokens.
+ * 
+ * @param introspectionEndpoint The Texas sidecar introspection URL (from ServerEnv)
  */
 class TexasClient(
-    private val introspectionEndpoint: String = System.getenv("NAIS_TOKEN_INTROSPECTION_ENDPOINT") 
-        ?: "http://localhost:8080/introspect"
+    private val introspectionEndpoint: String
 ) {
     private val client = HttpClient(CIO) {
         install(ContentNegotiation) {

@@ -10,30 +10,73 @@ import javax.sql.DataSource
 
 private val log = LoggerFactory.getLogger("Database")
 
-lateinit var dataSource: DataSource
-
-fun setDataSourceForTesting(ds: DataSource) {
-    dataSource = ds
+/**
+ * Application-level database holder.
+ * Initialized during application startup.
+ */
+object DatabaseHolder {
+    private var _dataSource: DataSource? = null
+    
+    val dataSource: DataSource
+        get() = _dataSource ?: throw IllegalStateException(
+            "Database not initialized. Call configureDatabase() first."
+        )
+    
+    /**
+     * Initialize for production use with ServerEnv configuration.
+     */
+    fun initialize(env: ServerEnv.DatabaseEnv) {
+        if (_dataSource != null) {
+            log.warn("Database already initialized, skipping")
+            return
+        }
+        _dataSource = createDataSource(env)
+        log.info("Database initialized with production configuration")
+    }
+    
+    /**
+     * Initialize for testing with a pre-configured DataSource.
+     */
+    fun initializeForTesting(dataSource: DataSource) {
+        _dataSource = dataSource
+        log.info("Database initialized with test configuration")
+    }
+    
+    /**
+     * Reset the database holder (for testing purposes only).
+     */
+    fun reset() {
+        (_dataSource as? HikariDataSource)?.close()
+        _dataSource = null
+    }
 }
 
+/**
+ * Ktor module extension to configure the database.
+ * Uses ServerEnv for type-safe configuration.
+ */
 fun Application.configureDatabase() {
-    val dbConfig = DatabaseConfig.fromEnvironment()
-    dataSource = createDataSource(dbConfig)
+    val env = ServerEnv.current
     
-    runMigrations(dataSource)
+    DatabaseHolder.initialize(env.database)
     
-    Database.connect(dataSource)
+    runMigrations(DatabaseHolder.dataSource)
+    
+    Database.connect(DatabaseHolder.dataSource)
     
     log.info("Database configured successfully")
 }
 
-fun createDataSource(config: DatabaseConfig): HikariDataSource {
+/**
+ * Create a HikariCP DataSource from environment configuration.
+ */
+fun createDataSource(config: ServerEnv.DatabaseEnv): HikariDataSource {
     val hikariConfig = HikariConfig().apply {
-        jdbcUrl = config.jdbcUrl
+        jdbcUrl = config.getConnectionUrl()
         username = config.username
         password = config.password
-        maximumPoolSize = config.maxPoolSize
-        minimumIdle = config.minIdle
+        maximumPoolSize = 10
+        minimumIdle = 2
         idleTimeout = 30000
         connectionTimeout = 30000
         maxLifetime = 1800000
@@ -49,6 +92,9 @@ fun createDataSource(config: DatabaseConfig): HikariDataSource {
     return HikariDataSource(hikariConfig)
 }
 
+/**
+ * Run Flyway database migrations.
+ */
 fun runMigrations(dataSource: DataSource) {
     log.info("Running database migrations...")
     
@@ -60,35 +106,4 @@ fun runMigrations(dataSource: DataSource) {
         .migrate()
     
     log.info("Database migrations completed")
-}
-
-data class DatabaseConfig(
-    val jdbcUrl: String,
-    val username: String,
-    val password: String,
-    val maxPoolSize: Int = 10,
-    val minIdle: Int = 2
-) {
-    companion object {
-        fun fromEnvironment(): DatabaseConfig {
-            // NAIS provides these environment variables for Cloud SQL
-            val host = System.getenv("DB_HOST") ?: "localhost"
-            val port = System.getenv("DB_PORT") ?: "5432"
-            val database = System.getenv("DB_DATABASE") ?: "flexjar"
-            val username = System.getenv("DB_USERNAME") ?: "flexjar"
-            val password = System.getenv("DB_PASSWORD") ?: "flexjar"
-            
-            // Cloud SQL requires SSL - use sslmode=require for GCP
-            val isCloudSql = System.getenv("DB_HOST")?.contains("cloud") == true || 
-                             System.getenv("NAIS_CLUSTER_NAME") != null
-            val sslParam = if (isCloudSql) "?sslmode=require" else ""
-            val jdbcUrl = "jdbc:postgresql://$host:$port/$database$sslParam"
-            
-            return DatabaseConfig(
-                jdbcUrl = jdbcUrl,
-                username = username,
-                password = password
-            )
-        }
-    }
 }

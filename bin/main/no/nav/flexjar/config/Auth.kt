@@ -15,14 +15,16 @@ private val log = LoggerFactory.getLogger("Auth")
 
 const val AZURE_REALM = "azure"
 
-// Environment variables for allowed client IDs
-const val FLEXJAR_ANALYTICS_CLIENT_ID_ENV = "FLEXJAR_ANALYTICS_CLIENT_ID"
-
 // Texas client instance (lazy initialized)
-private val texasClient by lazy { TexasClient() }
+private val texasClient by lazy { 
+    val endpoint = ServerEnv.current.nais.tokenIntrospectionEndpoint
+        ?: "http://localhost:8080/introspect"
+    TexasClient(endpoint)
+}
 
 fun Application.configureAuth() {
-    val authEnabled = !isDev()
+    val env = ServerEnv.current
+    val authEnabled = env.nais.isNais
     
     if (authEnabled) {
         log.info("Authentication enabled using NAIS Texas sidecar")
@@ -46,7 +48,7 @@ fun Application.configureAuth() {
                             navIdent = "Z999999",
                             name = "Lokal Utvikler",
                             token = "mock-token",
-                            clientId = getFlexjarAnalyticsClientId()
+                            clientId = env.auth.flexjarAnalyticsClientId
                         )
                     } else null
                 }
@@ -88,16 +90,13 @@ fun ApplicationCall.getBrukerPrincipal(): BrukerPrincipal? {
  * Get the allowed client ID for flexjar-analytics frontend.
  * Format: "cluster:namespace:app" e.g. "dev-gcp:team-esyfo:flexjar-analytics"
  */
-fun getFlexjarAnalyticsClientId(): String {
-    return System.getenv(FLEXJAR_ANALYTICS_CLIENT_ID_ENV)
-        ?: "${getClusterName()}:team-esyfo:flexjar-analytics"
-}
+fun getFlexjarAnalyticsClientId(): String = ServerEnv.current.auth.flexjarAnalyticsClientId
 
-fun getClusterName(): String = System.getenv("NAIS_CLUSTER_NAME") ?: "dev-gcp"
+fun getClusterName(): String = ServerEnv.current.nais.clusterName ?: "dev-gcp"
 
-fun isProdEnv(): Boolean = getClusterName() == "prod-gcp"
+fun isProdEnv(): Boolean = ServerEnv.current.nais.isProd
 
-fun isDev(): Boolean = System.getenv("NAIS_CLUSTER_NAME") == null
+fun isDev(): Boolean = ServerEnv.current.nais.isLocal
 
 data class CallerIdentity(
     val team: String,

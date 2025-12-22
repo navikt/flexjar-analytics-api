@@ -3,7 +3,7 @@ package no.nav.flexjar.repository
 import io.kotest.core.spec.style.FunSpec
 import io.kotest.matchers.shouldBe
 import no.nav.flexjar.TestDatabase
-import no.nav.flexjar.config.setDataSourceForTesting
+import no.nav.flexjar.config.DatabaseHolder
 import no.nav.flexjar.domain.StatsQuery
 import no.nav.flexjar.insertTestFeedback
 
@@ -11,7 +11,7 @@ class FeedbackStatsRepositoryTest : FunSpec({
     val repository = FeedbackStatsRepository()
 
     beforeSpec {
-        setDataSourceForTesting(TestDatabase.dataSource)
+        DatabaseHolder.initializeForTesting(TestDatabase.dataSource)
         TestDatabase.initialize()
     }
 

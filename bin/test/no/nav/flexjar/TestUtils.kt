@@ -11,7 +11,7 @@ import kotlinx.serialization.json.Json
 import no.nav.flexjar.config.auth.BrukerPrincipal
 import no.nav.flexjar.config.configureSerialization
 import no.nav.flexjar.config.configureStatusPages
-import no.nav.flexjar.config.setDataSourceForTesting
+import no.nav.flexjar.config.DatabaseHolder
 import no.nav.flexjar.repository.FeedbackRepository
 import no.nav.flexjar.routes.feedbackRoutes
 import no.nav.flexjar.routes.internalRoutes
@@ -88,7 +88,7 @@ fun Application.testModule(
     statsRepository: FeedbackStatsRepository = FeedbackStatsRepository()
 ) {
     // Initialize test database
-    setDataSourceForTesting(TestDatabase.dataSource)
+    DatabaseHolder.initializeForTesting(TestDatabase.dataSource)
     TestDatabase.initialize()
     
     configureSerialization()

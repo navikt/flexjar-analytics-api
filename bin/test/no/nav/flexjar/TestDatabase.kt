@@ -2,15 +2,19 @@ package no.nav.flexjar
 
 import com.zaxxer.hikari.HikariConfig
 import com.zaxxer.hikari.HikariDataSource
-import no.nav.flexjar.config.setDataSourceForTesting
+import no.nav.flexjar.config.DatabaseHolder
 import org.flywaydb.core.Flyway
 import org.jetbrains.exposed.sql.Database
 import org.testcontainers.containers.PostgreSQLContainer
 import org.testcontainers.containers.wait.strategy.HostPortWaitStrategy
 import javax.sql.DataSource
 
-class PsqlContainer : PostgreSQLContainer<PsqlContainer>("postgres:15-alpine")
+class PsqlContainer : PostgreSQLContainer<PsqlContainer>("postgres:17-alpine")
 
+/**
+ * Test database configuration using Testcontainers.
+ * Provides a clean, isolated PostgreSQL instance for each test run.
+ */
 object TestDatabase {
     private val container: PsqlContainer by lazy {
         PsqlContainer().apply {
@@ -27,8 +31,8 @@ object TestDatabase {
     val dataSource: DataSource
         get() = _dataSource ?: createDataSource().also { 
             _dataSource = it
-            // Set for production code to use
-            setDataSourceForTesting(it)
+            // Initialize the production DatabaseHolder with test datasource
+            DatabaseHolder.initializeForTesting(it)
         }
     
     private fun createDataSource(): HikariDataSource {
@@ -44,6 +48,9 @@ object TestDatabase {
         })
     }
     
+    /**
+     * Initialize the test database: run migrations and connect Exposed.
+     */
     fun initialize() {
         // Run migrations
         Flyway.configure()
@@ -56,6 +63,9 @@ object TestDatabase {
         Database.connect(dataSource)
     }
     
+    /**
+     * Clear all data from the database (for test isolation).
+     */
     fun clearAllData() {
         dataSource.connection.use { conn ->
             conn.createStatement().use { stmt ->
@@ -63,5 +73,14 @@ object TestDatabase {
             }
             conn.commit()
         }
+    }
+    
+    /**
+     * Reset the database holder after tests.
+     */
+    fun reset() {
+        DatabaseHolder.reset()
+        _dataSource?.close()
+        _dataSource = null
     }
 }
