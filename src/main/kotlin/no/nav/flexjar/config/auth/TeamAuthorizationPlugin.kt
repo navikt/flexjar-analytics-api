@@ -42,7 +42,9 @@ val TeamAuthorizationPlugin = createRouteScopedPlugin("TeamAuthorization") {
             log.warn("TeamAuthorization: User ${principal.navIdent} has no authorized teams")
             call.respond(HttpStatusCode.Forbidden, mapOf(
                 "error" to "NO_TEAM_ACCESS",
-                "message" to "You are not authorized for any teams"
+                "message" to "You don't have access to any teams in Flexjar Analytics",
+                "details" to "To get access, your team needs to be onboarded. See the README for instructions.",
+                "helpUrl" to "https://github.com/navikt/flexjar-analytics-api#getting-access"
             ))
             return@on
         }

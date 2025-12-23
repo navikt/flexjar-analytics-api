@@ -120,9 +120,23 @@ Authorization: Bearer <token>
 
 The token's `azp_name` claim identifies your app and determines which team the feedback belongs to.
 
-### For Analytics Dashboard Access
+### For Analytics Dashboard Access {#getting-access}
 
-The analytics dashboard (`flexjar-analytics`) requires Azure AD authentication with the `NAVident` claim. Only authorized NAV employees can access the analytics data.
+To access the Flexjar Analytics dashboard, your team must be onboarded:
+
+#### 1. Add your team's AD group to the configuration
+
+Create a PR or open an issue to add your team's Azure AD group UUID to:
+- `flexjar-analytics-api/src/main/kotlin/no/nav/flexjar/config/auth/TeamAuthorization.kt` (GROUP_TO_TEAM mapping)
+- `flexjar-analytics-api/nais/app/dev.yaml` and `prod.yaml` (claims.groups)
+
+#### 2. Ensure you're a member of the AD group
+
+You must be a member of your team's AD group to access analytics. Contact your team lead if you're unsure which group to join.
+
+#### 3. Log in with your NAV account
+
+Once your team is onboarded, simply log in at the dashboard URL with your NAV account.
 
 ## Sensitive Data Filtering
 

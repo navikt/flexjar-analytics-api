@@ -29,38 +29,11 @@ fun Application.configureAuth() {
     if (authEnabled) {
         logger.info("Authentication enabled using NAIS Texas sidecar")
         
-        // Debug logging for Authorization header presence (skip internal endpoints)
-        intercept(ApplicationCallPipeline.Plugins) {
-            val path = call.request.uri
-            // Skip logging for health check endpoints
-            if (path.startsWith("/internal/")) {
-                return@intercept
-            }
-            
-            val header = call.request.header(HttpHeaders.Authorization)
-            if (header != null) {
-                logger.info("Request received with Authorization header (length: ${header.length}). Path: $path")
-            } else {
-                logger.warn("Request received WITHOUT Authorization header. Path: $path")
-            }
-        }
-
         install(Authentication) {
             bearer(AZURE_REALM) {
                 realm = "flexjar-analytics-api"
                 authenticate { tokenCredential ->
-                    logger.info("Incoming request to protected route. Token length: ${tokenCredential.token.length}")
-                    val start = System.currentTimeMillis()
-                    val principal = validateTokenWithTexas(tokenCredential.token)
-                    val duration = System.currentTimeMillis() - start
-                    
-                    if (principal == null) {
-                        logger.error("Authentication failed: validateTokenWithTexas returned null after ${duration}ms")
-                    } else {
-                        logger.info("Authentication succeeded: User=${principal.navIdent}, Client=${principal.clientId} after ${duration}ms")
-                    }
-                    
-                    principal
+                    validateTokenWithTexas(tokenCredential.token)
                 }
             }
         }
@@ -102,9 +75,8 @@ private fun validateTokenWithTexas(token: String): BrukerPrincipal? {
             return@runBlocking null
         }
         
-        // Log the groups for debugging
         val groups = result.groups ?: emptyList()
-        logger.info("Token validated for user ${result.NAVident}. Groups in token: $groups (count: ${groups.size})")
+        logger.debug("Authenticated user ${result.NAVident} with ${groups.size} groups")
         
         BrukerPrincipal(
             navIdent = result.NAVident,
