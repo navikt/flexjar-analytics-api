@@ -27,6 +27,12 @@ private val GROUP_TO_TEAM = mapOf(
     // esyfo - Ekstern Sykefraværsoppfølging (namespace: team-esyfo)
     "ef4e9824-6f3a-4933-8f40-6edf5233d4d2" to "team-esyfo",
     
+    // flex - for compatibility with existing data (namespace: flex)
+    "00000000-0000-0000-0000-000000000001" to "flex",
+    
+    // team-test - for integration tests
+    "00000000-0000-0000-0000-000000000002" to "team-test",
+    
     // Add more teams here as needed:
     // "<ad-group-uuid>" to "<nais-namespace>",
 )

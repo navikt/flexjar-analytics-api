@@ -100,16 +100,6 @@ val SubmissionAuthPlugin = createRouteScopedPlugin(
 }
 
 /**
- * Caller identity extracted from the token.
- */
-data class CallerIdentity(
-    val team: String,
-    val app: String,
-    val navIdent: String?,
-    val name: String?
-)
-
-/**
  * Attribute key for storing caller identity in request.
  */
 val CallerIdentityKey = io.ktor.util.AttributeKey<CallerIdentity>("CallerIdentity")
@@ -122,3 +112,4 @@ fun ApplicationCall.getCallerIdentity(): CallerIdentity {
     return attributes.getOrNull(CallerIdentityKey)
         ?: throw ApiErrorException.UnauthorizedException("Caller identity not found - authentication required")
 }
+

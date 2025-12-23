@@ -9,6 +9,7 @@ import io.ktor.server.routing.*
 import io.ktor.server.testing.*
 import kotlinx.serialization.json.Json
 import no.nav.flexjar.config.auth.BrukerPrincipal
+import no.nav.flexjar.config.auth.TeamAuthorizationPlugin
 import no.nav.flexjar.config.configureSerialization
 import no.nav.flexjar.config.configureStatusPages
 import no.nav.flexjar.config.DatabaseHolder
@@ -105,7 +106,14 @@ fun Application.testModule(
                         navIdent = "A123456",
                         name = "Test User",
                         token = tokenCredential.token,
-                        clientId = "dev-gcp:team-esyfo:flexjar-analytics"
+                        clientId = "dev-gcp:team-esyfo:flexjar-analytics",
+                        // Include test groups that map to teams
+                        groups = listOf(
+                            "5066bb56-7f19-4b49-ae48-f1ba66abf546", // teamsykefravr
+                            "ef4e9824-6f3a-4933-8f40-6edf5233d4d2", // team-esyfo
+                            "00000000-0000-0000-0000-000000000001", // flex (test)
+                            "00000000-0000-0000-0000-000000000002"  // team-test
+                        )
                     )
                 } else null
             }
@@ -115,6 +123,9 @@ fun Application.testModule(
     routing {
         internalRoutes()
         authenticate("test-azure") {
+            // Install TeamAuthorizationPlugin like production
+            install(TeamAuthorizationPlugin)
+            
             feedbackRoutes(feedbackRepository)
             statsRoutes(feedbackRepository, statsRepository)
             exportRoutes(feedbackRepository)

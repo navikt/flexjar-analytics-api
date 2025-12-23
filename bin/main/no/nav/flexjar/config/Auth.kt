@@ -8,6 +8,7 @@ import io.ktor.server.request.*
 import io.ktor.server.response.*
 import kotlinx.coroutines.runBlocking
 import no.nav.flexjar.config.auth.BrukerPrincipal
+import no.nav.flexjar.config.auth.CallerIdentity
 import no.nav.flexjar.config.auth.TexasClient
 import org.slf4j.LoggerFactory
 
@@ -107,13 +108,6 @@ fun getClusterName(): String = ServerEnv.current.nais.clusterName ?: "dev-gcp"
 fun isProdEnv(): Boolean = ServerEnv.current.nais.isProd
 
 fun isDev(): Boolean = ServerEnv.current.nais.isLocal
-
-data class CallerIdentity(
-    val team: String,
-    val app: String,
-    val navIdent: String?,
-    val name: String?
-)
 
 /**
  * Extract caller identity from the principal's clientId (azp_name claim).

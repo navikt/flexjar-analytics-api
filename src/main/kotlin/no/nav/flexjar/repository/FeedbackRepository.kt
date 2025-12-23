@@ -16,6 +16,17 @@ import java.time.OffsetDateTime
 import java.util.*
 import kotlin.math.ceil
 
+/**
+ * Escape special characters for SQL LIKE patterns to prevent SQL injection.
+ * Escapes %, _, and \ which have special meaning in LIKE clauses.
+ */
+fun String.escapeLikePattern(): String {
+    return this
+        .replace("\\", "\\\\")
+        .replace("%", "\\%")
+        .replace("_", "\\_")
+}
+
 class FeedbackRepository(
     private val sensitiveDataFilter: SensitiveDataFilter = SensitiveDataFilter.DEFAULT
 ) {
@@ -53,16 +64,67 @@ class FeedbackRepository(
 
     fun save(feedbackJson: String, team: String, app: String): String {
         val id = UUID.randomUUID().toString()
+        
+        // Redact sensitive data BEFORE storing to database
+        val sanitizedJson = redactFeedbackJson(feedbackJson)
+        
         transaction {
             FeedbackTable.insert {
                 it[FeedbackTable.id] = id
                 it[FeedbackTable.opprettet] = Instant.now()
-                it[FeedbackTable.feedbackJson] = feedbackJson
+                it[FeedbackTable.feedbackJson] = sanitizedJson
                 it[FeedbackTable.team] = team
                 it[FeedbackTable.app] = app
             }
         }
         return id
+    }
+    
+    /**
+     * Redact sensitive data from feedback JSON before storage.
+     * Returns sanitized JSON with PII replaced.
+     */
+    private fun redactFeedbackJson(feedbackJson: String): String {
+        return try {
+            val jsonElement = json.parseToJsonElement(feedbackJson)
+            val jsonObj = jsonElement.jsonObject.toMutableMap()
+            
+            // Redact answers array if present
+            val answers = jsonObj["answers"] as? kotlinx.serialization.json.JsonArray
+            if (answers != null) {
+                val redactedAnswers = answers.map { answerEl ->
+                    val answerObj = answerEl.jsonObject.toMutableMap()
+                    val valueObj = answerObj["value"]?.jsonObject?.toMutableMap()
+                    
+                    if (valueObj != null && valueObj["type"]?.jsonPrimitive?.content == "text") {
+                        val originalText = valueObj["text"]?.jsonPrimitive?.content ?: ""
+                        val redacted = sensitiveDataFilter.redact(originalText)
+                        if (redacted.wasRedacted) {
+                            valueObj["text"] = kotlinx.serialization.json.JsonPrimitive(redacted.redactedText)
+                            answerObj["value"] = kotlinx.serialization.json.JsonObject(valueObj)
+                            log.info("Redacted sensitive data from answer before storage: ${redacted.matchedPatterns}")
+                        }
+                    }
+                    kotlinx.serialization.json.JsonObject(answerObj)
+                }
+                jsonObj["answers"] = kotlinx.serialization.json.JsonArray(redactedAnswers)
+            }
+            
+            // Redact legacy 'feedback' field if present
+            val feedbackText = jsonObj["feedback"]?.jsonPrimitive?.contentOrNull
+            if (feedbackText != null) {
+                val redacted = sensitiveDataFilter.redact(feedbackText)
+                if (redacted.wasRedacted) {
+                    jsonObj["feedback"] = kotlinx.serialization.json.JsonPrimitive(redacted.redactedText)
+                    log.info("Redacted sensitive data from legacy feedback field before storage")
+                }
+            }
+            
+            Json.encodeToString(kotlinx.serialization.json.JsonObject.serializer(), kotlinx.serialization.json.JsonObject(jsonObj))
+        } catch (e: Exception) {
+            log.warn("Failed to redact feedback JSON, storing original", e)
+            feedbackJson
+        }
     }
 
     fun update(id: String, feedbackJson: String): Boolean {
@@ -269,12 +331,14 @@ class FeedbackRepository(
         }
         
         criteria.tags.forEach { tag ->
-             query.andWhere { FeedbackTable.tags like "%$tag%" }
+             val escaped = tag.escapeLikePattern()
+             query.andWhere { FeedbackTable.tags like "%$escaped%" }
         }
         
         criteria.fritekst.forEach { text ->
+             val escaped = text.escapeLikePattern()
              val jsonText = JsonExtract(FeedbackTable.feedbackJson, listOf("feedback"))
-             query.andWhere { (jsonText like "%$text%") or (FeedbackTable.tags like "%$text%") }
+             query.andWhere { (jsonText like "%$escaped%") or (FeedbackTable.tags like "%$escaped%") }
         }
     }
 
