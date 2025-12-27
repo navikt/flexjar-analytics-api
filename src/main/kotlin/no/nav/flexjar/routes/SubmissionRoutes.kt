@@ -1,12 +1,14 @@
 package no.nav.flexjar.routes
 
 import io.ktor.http.*
+import io.ktor.server.plugins.ratelimit.*
 import io.ktor.server.request.*
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import no.nav.flexjar.config.SubmissionRateLimit
 import no.nav.flexjar.config.auth.SubmissionAuthPlugin
 import no.nav.flexjar.config.auth.getCallerIdentity
 import no.nav.flexjar.config.exception.ApiErrorException
@@ -23,38 +25,42 @@ private val json = Json { ignoreUnknownKeys = true }
  * All routes require authentication via Azure AD token.
  * The caller's identity (team/app) is extracted from the token's azp_name claim.
  * Any authenticated NAIS app can submit feedback - no whitelist required.
+ * 
+ * Rate limited to 100 requests per minute per calling application.
  */
 fun Route.submissionRoutes() {
-    route("/api") {
-        // Install authentication plugin for all submission routes
-        install(SubmissionAuthPlugin)
-        
-        // V1 legacy endpoint
-        post("/v1/feedback") {
-            handleSubmission(call, returnId = false)
-        }
-        
-        // V2 endpoint - returns ID
-        post("/v2/feedback") {
-            handleSubmission(call, returnId = true)
-        }
-        
-        // V2 update endpoint
-        put("/v2/feedback/{id}") {
-            handleUpdate(call)
-        }
-        
-        // Azure variants (same behavior, different paths for backwards compatibility)
-        post("/v1/feedback/azure") {
-            handleSubmission(call, returnId = false)
-        }
-        
-        post("/azure/v2/feedback") {
-            handleSubmission(call, returnId = true)
-        }
-        
-        put("/azure/v2/feedback/{id}") {
-            handleUpdate(call)
+    rateLimit(SubmissionRateLimit) {
+        route("/api") {
+            // Install authentication plugin for all submission routes
+            install(SubmissionAuthPlugin)
+            
+            // V1 legacy endpoint
+            post("/v1/feedback") {
+                handleSubmission(call, returnId = false)
+            }
+            
+            // V2 endpoint - returns ID
+            post("/v2/feedback") {
+                handleSubmission(call, returnId = true)
+            }
+            
+            // V2 update endpoint
+            put("/v2/feedback/{id}") {
+                handleUpdate(call)
+            }
+            
+            // Azure variants (same behavior, different paths for backwards compatibility)
+            post("/v1/feedback/azure") {
+                handleSubmission(call, returnId = false)
+            }
+            
+            post("/azure/v2/feedback") {
+                handleSubmission(call, returnId = true)
+            }
+            
+            put("/azure/v2/feedback/{id}") {
+                handleUpdate(call)
+            }
         }
     }
 }

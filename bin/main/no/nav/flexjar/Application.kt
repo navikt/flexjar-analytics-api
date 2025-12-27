@@ -7,6 +7,7 @@ import no.nav.flexjar.config.configureAuth
 import no.nav.flexjar.config.configureDatabase
 import no.nav.flexjar.config.configureMetrics
 import no.nav.flexjar.config.configureOpenApi
+import no.nav.flexjar.config.configureRateLimiting
 import no.nav.flexjar.config.configureRouting
 import no.nav.flexjar.config.configureSerialization
 import no.nav.flexjar.config.configureStatusPages
@@ -25,9 +26,11 @@ fun Application.module() {
     configureSerialization()
     configureStatusPages()
     configureCallLogging()
+    configureRateLimiting()
     configureAuth()
     configureDatabase()
     configureOpenApi()
     configureMetrics()
     configureRouting()
 }
+

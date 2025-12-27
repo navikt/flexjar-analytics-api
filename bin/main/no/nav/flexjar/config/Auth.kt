@@ -1,6 +1,5 @@
 package no.nav.flexjar.config
 
-import com.auth0.jwt.JWT
 import io.ktor.http.*
 import io.ktor.server.application.*
 import io.ktor.server.auth.*
@@ -112,6 +111,9 @@ fun isDev(): Boolean = ServerEnv.current.nais.isLocal
 /**
  * Extract caller identity from the principal's clientId (azp_name claim).
  * The clientId format is "cluster:namespace:app", e.g. "dev-gcp:team-esyfo:flexjar-analytics"
+ * 
+ * NOTE: Always use this function instead of decoding JWT tokens directly.
+ * The principal has already been validated by the Texas sidecar.
  */
 fun extractCallerIdentityFromPrincipal(principal: BrukerPrincipal): CallerIdentity? {
     return try {
@@ -127,29 +129,6 @@ fun extractCallerIdentityFromPrincipal(principal: BrukerPrincipal): CallerIdenti
         )
     } catch (e: Exception) {
         logger.error("Failed to extract caller identity from principal", e)
-        null
-    }
-}
-
-/**
- * Extract caller identity directly from a JWT token string.
- * Used for submission routes where we get the raw token from Authorization header.
- */
-fun extractCallerIdentity(token: String): CallerIdentity? {
-    return try {
-        val decoded = JWT.decode(token)
-        val azpName = decoded.getClaim("azp_name")?.asString() ?: return null
-        val parts = azpName.split(":")
-        if (parts.size < 3) return null
-        
-        CallerIdentity(
-            team = parts[1],
-            app = parts[2],
-            navIdent = decoded.getClaim("NAVident")?.asString(),
-            name = decoded.getClaim("name")?.asString()
-        )
-    } catch (e: Exception) {
-        logger.error("Failed to extract caller identity from token", e)
         null
     }
 }

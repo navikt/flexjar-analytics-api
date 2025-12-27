@@ -138,6 +138,24 @@ You must be a member of your team's AD group to access analytics. Contact your t
 
 Once your team is onboarded, simply log in at the dashboard URL with your NAV account.
 
+### ⚠️ AD Group Configuration (Security Notice)
+
+Authorization relies on Azure AD Group IDs. 
+**When onboarding a new team:**
+
+| Location | File | Required? | Purpose |
+|----------|------|-----------|---------|
+| Backend Code | [`TeamAuthorization.kt`](src/main/kotlin/no/nav/flexjar/config/auth/TeamAuthorization.kt) | **Yes** | `GROUP_TO_TEAM` mapping |
+| NAIS Config (Dev) | [`nais/app/dev.yaml`](nais/app/dev.yaml) | **Yes** | `azure.application.claims.groups` |
+| NAIS Config (Prod) | [`nais/app/prod.yaml`](nais/app/prod.yaml) | **Yes** | `azure.application.claims.groups` |
+
+**Current authorized groups:**
+| Group UUID | Team Namespace |
+|------------|----------------|
+| `5066bb56-7f19-4b49-ae48-f1ba66abf546` | `isyfo` |
+| `ef4e9824-6f3a-4933-8f40-6edf5233d4d2` | `esyfo` |
+
+
 ## Sensitive Data Filtering
 
 The API automatically redacts sensitive data from feedback text:
