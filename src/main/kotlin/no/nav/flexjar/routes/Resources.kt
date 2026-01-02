@@ -66,6 +66,10 @@ class ApiV1Intern {
         @Resource("top-tasks")
         @Serializable
         class TopTasks(val parent: Stats)
+
+        @Resource("survey-types")
+        @Serializable
+        class SurveyTypes(val parent: Stats)
     }
 
     @Resource("surveys")

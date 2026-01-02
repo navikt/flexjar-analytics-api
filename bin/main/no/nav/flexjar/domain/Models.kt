@@ -27,6 +27,8 @@ data class FeedbackDbRecord(
 enum class SurveyType {
     @SerialName("rating") RATING,
     @SerialName("topTasks") TOP_TASKS,
+    @SerialName("discovery") DISCOVERY,
+    @SerialName("taskPriority") TASK_PRIORITY,
     @SerialName("custom") CUSTOM
 }
 
@@ -335,4 +337,21 @@ data class TopTasksResponse(
     val tasks: List<TopTaskStats>,
     val dailyStats: Map<String, DailyStat> = emptyMap(),
     val questionText: String? = null
+)
+
+// ============================================
+// Survey Type Distribution Statistics
+// ============================================
+
+@Serializable
+data class SurveyTypeCount(
+    val type: SurveyType,
+    val count: Int,
+    val percentage: Int
+)
+
+@Serializable
+data class SurveyTypeDistribution(
+    val totalSurveys: Int,
+    val distribution: List<SurveyTypeCount>
 )

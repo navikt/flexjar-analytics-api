@@ -98,6 +98,38 @@ class FeedbackStatsRepository {
             processTopTasks(records)
         }
     }
+
+    fun getSurveyTypeDistribution(query: StatsQuery): SurveyTypeDistribution {
+        return transaction {
+            val dbQuery = FeedbackTable.selectAll()
+            applyStatsFilters(dbQuery, query)
+            val records = dbQuery.map { it.toDto() }
+            
+            // Count unique surveys by type
+            val surveyTypeCounts = mutableMapOf<SurveyType, Int>()
+            val seenSurveys = mutableMapOf<String, SurveyType>()
+            
+            for (record in records) {
+                val surveyType = record.surveyType ?: SurveyType.CUSTOM
+                val surveyId = record.surveyId
+                
+                // Only count each survey once
+                if (!seenSurveys.containsKey(surveyId)) {
+                    seenSurveys[surveyId] = surveyType
+                    surveyTypeCounts[surveyType] = (surveyTypeCounts[surveyType] ?: 0) + 1
+                }
+            }
+            
+            val totalSurveys = seenSurveys.size
+            val distribution = surveyTypeCounts.map { (type, count) ->
+                val percentage = if (totalSurveys > 0) (count * 100 / totalSurveys) else 0
+                SurveyTypeCount(type, count, percentage)
+            }.sortedByDescending { it.count }
+            
+            SurveyTypeDistribution(totalSurveys, distribution)
+        }
+    }
+
     
     private fun applyStatsFilters(query: Query, criteria: StatsQuery) {
          query.andWhere { FeedbackTable.team eq criteria.team }

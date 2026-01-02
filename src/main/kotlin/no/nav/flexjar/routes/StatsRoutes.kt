@@ -126,6 +126,23 @@ fun Route.statsRoutes(
         val stats = statsRepository.getTopTasksStats(query)
         call.respond(stats)
     }
+
+    // Get Survey Type distribution
+    get<ApiV1Intern.Stats.SurveyTypes> { params ->
+        val team = call.authorizedTeam
+
+        val query = StatsQuery(
+            team = team,
+            app = params.parent.app?.takeIf { it != FILTER_ALL },
+            from = params.parent.from,
+            to = params.parent.to,
+            feedbackId = null, // Don't filter by single survey - we want all
+            deviceType = params.parent.deviceType?.takeIf { it != FILTER_ALL }
+        )
+        
+        val distribution = statsRepository.getSurveyTypeDistribution(query)
+        call.respond(distribution)
+    }
 }
 
 private fun calculateAverageRating(byRating: Map<String, Int>): Double? {

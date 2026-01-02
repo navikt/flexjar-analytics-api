@@ -50,6 +50,8 @@ fun FeedbackDbRecord.toDto(): FeedbackDto {
     val surveyType = when (surveyTypeStr) {
         "rating", "RATING" -> SurveyType.RATING
         "topTasks", "TOP_TASKS" -> SurveyType.TOP_TASKS
+        "discovery", "DISCOVERY" -> SurveyType.DISCOVERY
+        "taskPriority", "TASK_PRIORITY" -> SurveyType.TASK_PRIORITY
         "custom", "CUSTOM" -> SurveyType.CUSTOM
         null -> null
         else -> SurveyType.CUSTOM
