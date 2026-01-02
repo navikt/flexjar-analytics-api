@@ -48,15 +48,24 @@ fun Route.statsRoutes(
         val averageRating = calculateAverageRating(stats.byRating)
         val days = calculateDays(query.from, query.to)
         
+        // Build privacy info if data should be masked
+        val privacy = if (stats.masked) {
+            PrivacyInfo(
+                masked = true,
+                reason = "Antall svar (${stats.totalCount}) er under ${stats.threshold}. Statistikk vises ikke av hensyn til personvern.",
+                threshold = stats.threshold
+            )
+        } else null
+        
         call.respond(FeedbackStats(
             totalCount = stats.totalCount.toInt(),
             countWithText = stats.countWithText.toInt(),
             countWithoutText = (stats.totalCount - stats.countWithText).toInt(),
-            byRating = stats.byRating,
-            byApp = stats.byApp,
-            byDate = stats.byDate,
-            byFeedbackId = stats.byFeedbackId,
-            averageRating = averageRating,
+            byRating = if (stats.masked) emptyMap() else stats.byRating,
+            byApp = if (stats.masked) emptyMap() else stats.byApp,
+            byDate = if (stats.masked) emptyMap() else stats.byDate,
+            byFeedbackId = if (stats.masked) emptyMap() else stats.byFeedbackId,
+            averageRating = if (stats.masked) null else averageRating,
             period = StatsPeriod(
                 from = query.from,
                 to = query.to,
@@ -64,7 +73,8 @@ fun Route.statsRoutes(
             ),
             surveyType = stats.surveyType?.let { 
                 try { SurveyType.valueOf(it.uppercase()) } catch(e: Exception) { SurveyType.CUSTOM }
-            }
+            },
+            privacy = privacy
         ))
     }
     

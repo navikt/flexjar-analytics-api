@@ -13,11 +13,19 @@ import java.time.OffsetDateTime
 class FeedbackStatsRepository {
     private val json = Json { ignoreUnknownKeys = true }
 
+    companion object {
+        /** Minimum number of responses required to show aggregated statistics */
+        const val MIN_AGGREGATION_THRESHOLD = 5
+    }
+
     fun getStats(query: StatsQuery): FeedbackStatsResult {
         return transaction {
             val totalQuery = FeedbackTable.selectAll()
             applyStatsFilters(totalQuery, query)
             val totalCount = totalQuery.count()
+            
+            // Check if we should mask data for privacy
+            val shouldMask = totalCount in 1 until MIN_AGGREGATION_THRESHOLD
             
             val textQuery = FeedbackTable.selectAll()
             applyStatsFilters(textQuery, query)
@@ -85,7 +93,9 @@ class FeedbackStatsRepository {
                 byRating = byRating,
                 byApp = byApp,
                 byDate = byDate,
-                byFeedbackId = byFeedbackId
+                byFeedbackId = byFeedbackId,
+                masked = shouldMask,
+                threshold = MIN_AGGREGATION_THRESHOLD
             )
         }
     }

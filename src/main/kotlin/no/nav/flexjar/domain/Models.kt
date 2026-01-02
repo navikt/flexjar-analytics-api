@@ -166,6 +166,17 @@ data class TagInput(
 )
 
 /**
+ * Privacy information for aggregation threshold
+ * Used to prevent identification of individuals in small datasets
+ */
+@Serializable
+data class PrivacyInfo(
+    val masked: Boolean = false,
+    val reason: String? = null,
+    val threshold: Int = 5
+)
+
+/**
  * Statistics response
  */
 @Serializable
@@ -185,7 +196,9 @@ data class FeedbackStats(
     val byDevice: Map<String, DeviceStats> = emptyMap(),
     val byPathname: Map<String, PathnameStats> = emptyMap(),
     val lowestRatingPaths: Map<String, PathnameStats> = emptyMap(),
-    val fieldStats: List<FieldStat> = emptyList()
+    val fieldStats: List<FieldStat> = emptyList(),
+    // Privacy threshold info
+    val privacy: PrivacyInfo? = null
 )
 
 @Serializable
@@ -279,7 +292,10 @@ data class FeedbackStatsResult(
     val byRating: Map<String, Int>,
     val byApp: Map<String, Int>,
     val byDate: Map<String, Int>,
-    val byFeedbackId: Map<String, Int>
+    val byFeedbackId: Map<String, Int>,
+    // Privacy threshold
+    val masked: Boolean = false,
+    val threshold: Int = 5
 )
 
 /**
