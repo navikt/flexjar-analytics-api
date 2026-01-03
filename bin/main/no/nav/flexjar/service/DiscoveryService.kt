@@ -141,19 +141,49 @@ class DiscoveryService(
 
     /**
      * Match text to a theme based on keywords.
+     * Uses simple Norwegian stemming for better matching (e.g., "søknad" matches "søknaden").
      * Returns the name of the first matching theme (by priority) or "Annet".
      */
     internal fun matchTheme(text: String, themes: List<TextThemeDto>): String {
-        val lowerText = text.lowercase()
+        val textWords = extractWords(text).map { stemNorwegian(it) }.toSet()
+        
         for (theme in themes.sortedByDescending { it.priority }) {
-            val matches = theme.keywords.any { keyword ->
-                lowerText.contains(keyword.lowercase())
-            }
-            if (matches) {
+            val keywordStems = theme.keywords.map { stemNorwegian(it.lowercase()) }.toSet()
+            if (textWords.any { it in keywordStems }) {
                 return theme.name
             }
         }
         return "Annet"
+    }
+    
+    /**
+     * Simple Norwegian stemmer that removes common suffixes.
+     * Handles definite articles, plurals, and verb forms.
+     */
+    internal fun stemNorwegian(word: String): String {
+        var stem = word.lowercase().trim()
+        
+        // Order matters: check longer suffixes first
+        val suffixes = listOf(
+            // Definite plural
+            "ene", "ane", 
+            // Definite singular
+            "en", "et", "a",
+            // Indefinite plural  
+            "er", "ar",
+            // Verb past tense
+            "te", "de",
+            // Adjective endings
+            "ere", "est"
+        )
+        
+        for (suffix in suffixes) {
+            if (stem.length > suffix.length + 2 && stem.endsWith(suffix)) {
+                return stem.dropLast(suffix.length)
+            }
+        }
+        
+        return stem
     }
 }
 
