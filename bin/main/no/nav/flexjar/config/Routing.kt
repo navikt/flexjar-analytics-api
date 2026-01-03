@@ -5,6 +5,7 @@ import io.ktor.server.auth.*
 import io.ktor.server.routing.*
 import no.nav.flexjar.config.auth.ClientAuthorizationPlugin
 import no.nav.flexjar.config.auth.TeamAuthorizationPlugin
+import no.nav.flexjar.routes.discoveryRoutes
 import no.nav.flexjar.routes.feedbackRoutes
 import no.nav.flexjar.routes.exportRoutes
 import no.nav.flexjar.routes.statsRoutes
@@ -33,6 +34,7 @@ fun Application.configureRouting() {
             feedbackRoutes()
             statsRoutes()
             exportRoutes()
+            discoveryRoutes()
         }
     }
 }

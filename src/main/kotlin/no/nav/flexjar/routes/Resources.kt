@@ -70,6 +70,18 @@ class ApiV1Intern {
         @Resource("survey-types")
         @Serializable
         class SurveyTypes(val parent: Stats)
+
+        @Resource("discovery")
+        @Serializable
+        class Discovery(val parent: Stats)
+    }
+
+    @Resource("themes")
+    @Serializable
+    class Themes(val parent: ApiV1Intern = ApiV1Intern()) {
+        @Resource("{id}")
+        @Serializable
+        class Id(val parent: Themes, val id: String)
     }
 
     @Resource("surveys")

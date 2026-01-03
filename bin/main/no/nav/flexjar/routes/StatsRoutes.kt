@@ -8,6 +8,7 @@ import no.nav.flexjar.config.auth.authorizedTeam
 import no.nav.flexjar.domain.DeviceStats
 import no.nav.flexjar.domain.FeedbackStats
 import no.nav.flexjar.domain.PathnameStats
+import no.nav.flexjar.domain.PrivacyInfo
 import no.nav.flexjar.domain.RatingByDateEntry
 import no.nav.flexjar.domain.StatsPeriod
 import no.nav.flexjar.domain.StatsQuery
