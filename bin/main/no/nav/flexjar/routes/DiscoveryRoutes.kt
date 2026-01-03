@@ -3,9 +3,6 @@ package no.nav.flexjar.routes
 import io.ktor.http.*
 import io.ktor.server.request.*
 import io.ktor.server.resources.*
-import io.ktor.server.resources.post
-import io.ktor.server.resources.put
-import io.ktor.server.resources.delete
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
 import no.nav.flexjar.config.auth.authorizedTeam
