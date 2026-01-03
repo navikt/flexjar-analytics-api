@@ -11,17 +11,17 @@ import io.ktor.server.routing.*
 import no.nav.flexjar.config.auth.authorizedTeam
 import no.nav.flexjar.domain.*
 import no.nav.flexjar.repository.TextThemeRepository
-import no.nav.flexjar.repository.FeedbackRepository
+import no.nav.flexjar.service.DiscoveryService
 import org.slf4j.LoggerFactory
 import java.util.*
 
 private val log = LoggerFactory.getLogger("DiscoveryRoutes")
 private val defaultThemeRepository = TextThemeRepository()
-private val defaultFeedbackRepository = FeedbackRepository()
+private val defaultDiscoveryService = DiscoveryService()
 
 fun Route.discoveryRoutes(
     themeRepository: TextThemeRepository = defaultThemeRepository,
-    feedbackRepository: FeedbackRepository = defaultFeedbackRepository
+    discoveryService: DiscoveryService = defaultDiscoveryService
 ) {
     // ============================================
     // Theme CRUD endpoints (generic, usable for all surveys)
@@ -134,29 +134,7 @@ fun Route.discoveryRoutes(
             deviceType = params.parent.deviceType?.takeIf { it != FILTER_ALL }
         )
 
-        // Get themes for this team (reusable across all surveys)
-        val themes = themeRepository.findByTeam(team)
-
-        // Get discovery statistics with theme grouping
-        val stats = getDiscoveryStats(query, themes, feedbackRepository)
+        val stats = discoveryService.getStats(query)
         call.respond(stats)
     }
-}
-
-/**
- * Get discovery statistics with theme-based grouping using Postgres FTS.
- */
-private fun getDiscoveryStats(
-    query: StatsQuery,
-    themes: List<TextThemeDto>,
-    repository: FeedbackRepository
-): DiscoveryStatsResponse {
-    // For now, return a simplified response
-    // The full FTS implementation will be added in a follow-up
-    return DiscoveryStatsResponse(
-        totalSubmissions = 0,
-        wordFrequency = emptyList(),
-        themes = emptyList(),
-        recentResponses = emptyList()
-    )
 }
