@@ -1,38 +1,24 @@
 package no.nav.flexjar.routes
 
-import io.ktor.http.*
 import io.ktor.server.resources.get
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
 import no.nav.flexjar.config.auth.authorizedTeam
-import no.nav.flexjar.domain.DeviceStats
-import no.nav.flexjar.domain.FeedbackStats
-import no.nav.flexjar.domain.PathnameStats
-import no.nav.flexjar.domain.PrivacyInfo
-import no.nav.flexjar.domain.RatingByDateEntry
-import no.nav.flexjar.domain.StatsPeriod
-import no.nav.flexjar.domain.StatsQuery
-import no.nav.flexjar.domain.RatingDistribution
-import no.nav.flexjar.domain.SurveyType
-import no.nav.flexjar.domain.TimelineEntry
-import no.nav.flexjar.domain.TimelineResponse
 import no.nav.flexjar.domain.FILTER_ALL
-import no.nav.flexjar.repository.FeedbackRepository
-import java.time.LocalDate
-import java.time.temporal.ChronoUnit
+import no.nav.flexjar.domain.StatsQuery
+import no.nav.flexjar.service.StatsService
 
-import no.nav.flexjar.repository.FeedbackStatsRepository
+private val defaultStatsService = StatsService()
 
-private val defaultFeedbackRepository = FeedbackRepository()
-private val defaultStatsRepository = FeedbackStatsRepository()
-
+/**
+ * Routes for feedback statistics endpoints.
+ * Delegates business logic to StatsService.
+ */
 fun Route.statsRoutes(
-    repository: FeedbackRepository = defaultFeedbackRepository,
-    statsRepository: FeedbackStatsRepository = defaultStatsRepository
+    statsService: StatsService = defaultStatsService
 ) {
     // Get statistics for feedback
     get<ApiV1Intern.Stats> { params ->
-        // Team is already validated by TeamAuthorizationPlugin
         val team = call.authorizedTeam
 
         val query = StatsQuery(
@@ -44,39 +30,8 @@ fun Route.statsRoutes(
             deviceType = params.deviceType?.takeIf { it != FILTER_ALL }
         )
         
-        val stats = statsRepository.getStats(query)
-        
-        val averageRating = calculateAverageRating(stats.byRating)
-        val days = calculateDays(query.from, query.to)
-        
-        // Build privacy info if data should be masked
-        val privacy = if (stats.masked) {
-            PrivacyInfo(
-                masked = true,
-                reason = "Antall svar (${stats.totalCount}) er under ${stats.threshold}. Statistikk vises ikke av hensyn til personvern.",
-                threshold = stats.threshold
-            )
-        } else null
-        
-        call.respond(FeedbackStats(
-            totalCount = stats.totalCount.toInt(),
-            countWithText = stats.countWithText.toInt(),
-            countWithoutText = (stats.totalCount - stats.countWithText).toInt(),
-            byRating = if (stats.masked) emptyMap() else stats.byRating,
-            byApp = if (stats.masked) emptyMap() else stats.byApp,
-            byDate = if (stats.masked) emptyMap() else stats.byDate,
-            byFeedbackId = if (stats.masked) emptyMap() else stats.byFeedbackId,
-            averageRating = if (stats.masked) null else averageRating,
-            period = StatsPeriod(
-                from = query.from,
-                to = query.to,
-                days = days
-            ),
-            surveyType = stats.surveyType?.let { 
-                try { SurveyType.valueOf(it.uppercase()) } catch(e: Exception) { SurveyType.CUSTOM }
-            },
-            privacy = privacy
-        ))
+        val stats = statsService.getStats(query)
+        call.respond(stats)
     }
     
     // Get rating distribution
@@ -91,13 +46,8 @@ fun Route.statsRoutes(
             feedbackId = params.parent.feedbackId
         )
         
-        val stats = statsRepository.getStats(query)
-        
-        call.respond(RatingDistribution(
-            distribution = stats.byRating,
-            average = calculateAverageRating(stats.byRating),
-            total = stats.byRating.values.sum()
-        ))
+        val distribution = statsService.getRatingDistribution(query)
+        call.respond(distribution)
     }
     
     // Get timeline data
@@ -112,13 +62,8 @@ fun Route.statsRoutes(
             feedbackId = params.parent.feedbackId
         )
         
-        val stats = statsRepository.getStats(query)
-        
-        call.respond(TimelineResponse(
-            data = stats.byDate.map { (date, count) ->
-                TimelineEntry(date = date, count = count)
-            }.sortedBy { it.date }
-        ))
+        val timeline = statsService.getTimeline(query)
+        call.respond(timeline)
     }
 
     // Get Top Tasks statistics
@@ -134,7 +79,7 @@ fun Route.statsRoutes(
             deviceType = params.parent.deviceType?.takeIf { it != FILTER_ALL }
         )
         
-        val stats = statsRepository.getTopTasksStats(query)
+        val stats = statsService.getTopTasksStats(query)
         call.respond(stats)
     }
 
@@ -151,30 +96,7 @@ fun Route.statsRoutes(
             deviceType = params.parent.deviceType?.takeIf { it != FILTER_ALL }
         )
         
-        val distribution = statsRepository.getSurveyTypeDistribution(query)
+        val distribution = statsService.getSurveyTypeDistribution(query)
         call.respond(distribution)
-    }
-}
-
-private fun calculateAverageRating(byRating: Map<String, Int>): Double? {
-    val numericRatings = byRating.mapNotNull { (rating, count) ->
-        rating.toIntOrNull()?.let { it to count }
-    }
-    
-    if (numericRatings.isEmpty()) return null
-    
-    val totalSum = numericRatings.map { it.first * it.second }.sum()
-    val totalCount = numericRatings.sumOf { it.second }
-    
-    return if (totalCount > 0) totalSum.toDouble() / totalCount else null
-}
-
-private fun calculateDays(from: String?, to: String?): Int {
-    return try {
-        val fromDate = from?.let { LocalDate.parse(it.take(10)) } ?: LocalDate.now().minusDays(30)
-        val toDate = to?.let { LocalDate.parse(it.take(10)) } ?: LocalDate.now()
-        ChronoUnit.DAYS.between(fromDate, toDate).toInt().coerceAtLeast(1)
-    } catch (e: Exception) {
-        30
     }
 }

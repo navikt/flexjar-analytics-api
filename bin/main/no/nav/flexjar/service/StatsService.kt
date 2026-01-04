@@ -1,0 +1,125 @@
+package no.nav.flexjar.service
+
+import no.nav.flexjar.domain.*
+import no.nav.flexjar.repository.FeedbackRepository
+import no.nav.flexjar.repository.FeedbackStatsRepository
+import java.time.LocalDate
+import java.time.temporal.ChronoUnit
+
+/**
+ * Service layer for feedback statistics.
+ * Contains business logic for calculating and aggregating feedback statistics.
+ */
+class StatsService(
+    private val feedbackRepository: FeedbackRepository = FeedbackRepository(),
+    private val statsRepository: FeedbackStatsRepository = FeedbackStatsRepository()
+) {
+    /**
+     * Get comprehensive feedback statistics for the given query.
+     */
+    fun getStats(query: StatsQuery): FeedbackStats {
+        val stats = statsRepository.getStats(query)
+        
+        val averageRating = calculateAverageRating(stats.byRating)
+        val days = calculateDays(query.from, query.to)
+        
+        // Build privacy info if data should be masked
+        val privacy = if (stats.masked) {
+            PrivacyInfo(
+                masked = true,
+                reason = "Antall svar (${stats.totalCount}) er under ${stats.threshold}. Statistikk vises ikke av hensyn til personvern.",
+                threshold = stats.threshold
+            )
+        } else null
+        
+        return FeedbackStats(
+            totalCount = stats.totalCount.toInt(),
+            countWithText = stats.countWithText.toInt(),
+            countWithoutText = (stats.totalCount - stats.countWithText).toInt(),
+            byRating = if (stats.masked) emptyMap() else stats.byRating,
+            byApp = if (stats.masked) emptyMap() else stats.byApp,
+            byDate = if (stats.masked) emptyMap() else stats.byDate,
+            byFeedbackId = if (stats.masked) emptyMap() else stats.byFeedbackId,
+            averageRating = if (stats.masked) null else averageRating,
+            period = StatsPeriod(
+                from = query.from,
+                to = query.to,
+                days = days
+            ),
+            surveyType = stats.surveyType?.let { 
+                try { SurveyType.valueOf(it.uppercase()) } catch(e: Exception) { SurveyType.CUSTOM }
+            },
+            privacy = privacy
+        )
+    }
+
+    /**
+     * Get rating distribution for the given query.
+     */
+    fun getRatingDistribution(query: StatsQuery): RatingDistribution {
+        val stats = statsRepository.getStats(query)
+        
+        return RatingDistribution(
+            distribution = stats.byRating,
+            average = calculateAverageRating(stats.byRating),
+            total = stats.byRating.values.sum()
+        )
+    }
+
+    /**
+     * Get timeline data for the given query.
+     */
+    fun getTimeline(query: StatsQuery): TimelineResponse {
+        val stats = statsRepository.getStats(query)
+        
+        return TimelineResponse(
+            data = stats.byDate.map { (date, count) ->
+                TimelineEntry(date = date, count = count)
+            }.sortedBy { it.date }
+        )
+    }
+
+    /**
+     * Get Top Tasks statistics for the given query.
+     */
+    fun getTopTasksStats(query: StatsQuery): TopTasksResponse {
+        return statsRepository.getTopTasksStats(query)
+    }
+
+    /**
+     * Get Survey Type distribution for the given query.
+     */
+    fun getSurveyTypeDistribution(query: StatsQuery): SurveyTypeDistribution {
+        return statsRepository.getSurveyTypeDistribution(query)
+    }
+
+    /**
+     * Calculate average rating from rating distribution.
+     * Returns null if no numeric ratings found.
+     */
+    fun calculateAverageRating(byRating: Map<String, Int>): Double? {
+        val numericRatings = byRating.mapNotNull { (rating, count) ->
+            rating.toIntOrNull()?.let { it to count }
+        }
+        
+        if (numericRatings.isEmpty()) return null
+        
+        val totalSum = numericRatings.map { it.first * it.second }.sum()
+        val totalCount = numericRatings.sumOf { it.second }
+        
+        return if (totalCount > 0) totalSum.toDouble() / totalCount else null
+    }
+
+    /**
+     * Calculate number of days in the query period.
+     */
+    fun calculateDays(from: String?, to: String?): Int {
+        return try {
+            val fromDate = from?.let { LocalDate.parse(it.take(10)) } ?: LocalDate.now().minusDays(30)
+            val toDate = to?.let { LocalDate.parse(it.take(10)) } ?: LocalDate.now()
+            ChronoUnit.DAYS.between(fromDate, toDate).toInt().coerceAtLeast(1)
+        } catch (e: Exception) {
+            30
+        }
+    }
+}

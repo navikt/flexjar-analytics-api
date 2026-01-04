@@ -19,6 +19,8 @@ import no.nav.flexjar.routes.internalRoutes
 import no.nav.flexjar.routes.statsRoutes
 import no.nav.flexjar.routes.exportRoutes
 import no.nav.flexjar.repository.FeedbackStatsRepository
+import no.nav.flexjar.service.StatsService
+import no.nav.flexjar.service.ExportService
 import java.time.OffsetDateTime
 import java.util.UUID
 
@@ -120,6 +122,10 @@ fun Application.testModule(
         }
     }
     
+    // Create services with the injected repositories
+    val statsService = StatsService(feedbackRepository, statsRepository)
+    val exportService = ExportService(feedbackRepository)
+    
     routing {
         internalRoutes()
         authenticate("test-azure") {
@@ -127,9 +133,8 @@ fun Application.testModule(
             install(TeamAuthorizationPlugin)
             
             feedbackRoutes(feedbackRepository)
-            statsRoutes(feedbackRepository, statsRepository)
-            exportRoutes(feedbackRepository)
+            statsRoutes(statsService)
+            exportRoutes(exportService)
         }
     }
 }
-
