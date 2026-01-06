@@ -116,12 +116,22 @@ fun Route.feedbackRoutes(repository: FeedbackRepository = defaultFeedbackReposit
         call.respond(TeamsAndApps(teams = teamsAndApps))
     }
     
-    // Get all metadata keys and values
+    // Get all metadata keys and values (filtered by cardinality for graph-friendly data)
     get<ApiV1Intern.Feedback.MetadataKeys> { params ->
         val metadataKeys = repository.findMetadataKeysForSurvey(params.feedbackId, params.team)
+        
+        // Filter by cardinality if specified (default 10)
+        val maxCard = params.maxCardinality
+        val filteredKeys = if (maxCard != null) {
+            metadataKeys.filter { it.value.size <= maxCard }
+        } else {
+            metadataKeys
+        }
+        
         call.respond(mapOf(
             "feedbackId" to params.feedbackId,
-            "metadataKeys" to metadataKeys
+            "metadataKeys" to filteredKeys,
+            "maxCardinality" to maxCard
         ))
     }
 

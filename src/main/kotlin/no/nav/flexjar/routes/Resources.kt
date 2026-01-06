@@ -41,7 +41,13 @@ class ApiV1Intern {
 
         @Resource("metadata-keys")
         @Serializable
-        class MetadataKeys(val parent: Feedback, val feedbackId: String, val team: String)
+        class MetadataKeys(
+            val parent: Feedback, 
+            val feedbackId: String, 
+            val team: String,
+            /** Max unique values per key. Keys with more values are filtered out. Default 10. */
+            val maxCardinality: Int? = 10
+        )
     }
 
     @Resource("stats")
