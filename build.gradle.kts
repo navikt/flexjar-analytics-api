@@ -1,10 +1,11 @@
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
 plugins {
-    kotlin("jvm") version "2.1.0"
-    kotlin("plugin.serialization") version "2.1.0"
-    id("io.ktor.plugin") version "3.0.2"
-    id("com.gradleup.shadow") version "8.3.9"
+    kotlin("jvm") version "2.3.0"
+    kotlin("plugin.serialization") version "2.3.0"
+    id("io.ktor.plugin") version "3.3.3"
+    id("com.gradleup.shadow") version "9.3.1"
+    id("com.github.ben-manes.versions") version "0.53.0"
     application
 }
 
@@ -22,19 +23,19 @@ repositories {
     }
 }
 
-val ktorVersion = "3.0.2"
-val kotlinVersion = "2.1.0"
-val logbackVersion = "1.5.12"
-val logstashVersion = "8.0"
-val postgresVersion = "42.7.4"
-val hikariVersion = "6.2.1"
-val flywayVersion = "11.1.0"
-val kotestVersion = "5.9.1"
-val mockkVersion = "1.13.13"
-val testcontainersVersion = "1.20.4"
+val ktorVersion = "3.3.3"
+val kotlinVersion = "2.3.0"
+val logbackVersion = "1.5.24"
+val logstashVersion = "9.0"
+val postgresVersion = "42.7.8"
+val hikariVersion = "7.0.2"
+val flywayVersion = "11.20.0"
+val kotestVersion = "6.0.7"
+val mockkVersion = "1.14.7"
+val testcontainersVersion = "1.21.4"
 val tokenSupportVersion = "5.0.13"
 val exposedVersion = "0.56.0"
-val micrometerVersion = "1.14.2"
+val micrometerVersion = "1.16.1"
 
 dependencies {
     // Ktor Server
@@ -82,7 +83,7 @@ dependencies {
     implementation("net.logstash.logback:logstash-logback-encoder:$logstashVersion")
     
     // Excel export
-    implementation("org.apache.poi:poi-ooxml:5.3.0")
+    implementation("org.apache.poi:poi-ooxml:5.5.1")
     
     // Testing
     testImplementation("io.ktor:ktor-server-test-host:$ktorVersion")
@@ -92,7 +93,7 @@ dependencies {
     testImplementation("io.mockk:mockk:$mockkVersion")
     testImplementation("org.testcontainers:testcontainers:$testcontainersVersion")
     testImplementation("org.testcontainers:postgresql:$testcontainersVersion")
-    testImplementation("no.nav.security:mock-oauth2-server:2.1.10")
+    testImplementation("no.nav.security:mock-oauth2-server:3.0.1")
 }
 
 java {
