@@ -58,13 +58,29 @@ fun FeedbackDbRecord.toDto(): FeedbackDto {
     }
     
     val context = jsonObj["context"]?.jsonObject?.let { ctxObj ->
+        val viewportObj = ctxObj["viewport"]?.jsonObject
+
+        val viewportWidth =
+            ctxObj["viewportWidth"]?.jsonPrimitive?.intOrNull
+                ?: viewportObj?.get("width")?.jsonPrimitive?.intOrNull
+
+        val viewportHeight =
+            ctxObj["viewportHeight"]?.jsonPrimitive?.intOrNull
+                ?: viewportObj?.get("height")?.jsonPrimitive?.intOrNull
+
+        val tags = ctxObj["tags"]?.jsonObject?.entries?.associate { (key, value) ->
+            key to (value.jsonPrimitive.contentOrNull ?: value.toString())
+        }
+
         SubmissionContext(
             url = ctxObj["url"]?.jsonPrimitive?.contentOrNull,
             pathname = ctxObj["pathname"]?.jsonPrimitive?.contentOrNull,
             deviceType = ctxObj["deviceType"]?.jsonPrimitive?.contentOrNull?.let { dt ->
                 try { DeviceType.valueOf(dt.uppercase()) } catch (e: Exception) { null }
             },
-            viewportWidth = ctxObj["viewportWidth"]?.jsonPrimitive?.int
+            viewportWidth = viewportWidth,
+            viewportHeight = viewportHeight,
+            tags = tags
         )
     }
     

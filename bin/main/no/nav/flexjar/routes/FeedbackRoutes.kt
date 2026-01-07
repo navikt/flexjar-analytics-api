@@ -11,6 +11,7 @@ import io.ktor.server.routing.*
 import no.nav.flexjar.config.auth.authorizedTeam
 import no.nav.flexjar.domain.FeedbackPage
 import no.nav.flexjar.domain.FeedbackQuery
+import no.nav.flexjar.domain.ContextTagsResponse
 import no.nav.flexjar.domain.FILTER_ALL
 import no.nav.flexjar.domain.TagInput
 import no.nav.flexjar.domain.TeamsAndApps
@@ -133,6 +134,28 @@ fun Route.feedbackRoutes(repository: FeedbackRepository = defaultFeedbackReposit
             "metadataKeys" to filteredKeys,
             "maxCardinality" to maxCard
         ))
+    }
+
+    // Get all context tags and values with counts (filtered by cardinality for graph-friendly data)
+    get<ApiV1Intern.Feedback.ContextTags> { params ->
+        val team = call.authorizedTeam
+
+        val contextTags = repository.findContextTagsForSurvey(params.feedbackId, team)
+
+        val maxCard = params.maxCardinality
+        val filteredTags = if (maxCard != null) {
+            contextTags.filter { it.value.size <= maxCard }
+        } else {
+            contextTags
+        }
+
+        call.respond(
+            ContextTagsResponse(
+                feedbackId = params.feedbackId,
+                contextTags = filteredTags,
+                maxCardinality = maxCard
+            )
+        )
     }
 
     // Get all surveys (grouped by app)

@@ -106,7 +106,22 @@ data class SubmissionContext(
     val pathname: String? = null,
     val deviceType: DeviceType? = null,
     val viewportWidth: Int? = null,
-    val viewportHeight: Int? = null
+    val viewportHeight: Int? = null,
+    /** Context tags from widget (low-cardinality segmentation) */
+    val tags: Map<String, String>? = null
+)
+
+@Serializable
+data class MetadataValueWithCount(
+    val value: String,
+    val count: Int
+)
+
+@Serializable
+data class ContextTagsResponse(
+    val feedbackId: String,
+    val contextTags: Map<String, List<MetadataValueWithCount>>,
+    val maxCardinality: Int? = null
 )
 
 // ============================================

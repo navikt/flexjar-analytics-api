@@ -296,6 +296,38 @@ class FeedbackRepository(
         }
     }
 
+    fun findContextTagsForSurvey(feedbackId: String, team: String = "flex"): Map<String, List<MetadataValueWithCount>> {
+        return transaction {
+            val sql = """
+                SELECT
+                    key as tag_key,
+                    feedback_json::json->'context'->'tags'->>key as tag_value,
+                    COUNT(*) as tag_count
+                FROM feedback,
+                     jsonb_object_keys(feedback_json::jsonb->'context'->'tags') as key
+                WHERE team = ?
+                  AND feedback_json::json->>'feedbackId' = ?
+                  AND feedback_json::jsonb->'context'->'tags' IS NOT NULL
+                GROUP BY key, tag_value
+            """.trimIndent()
+
+            val result = mutableMapOf<String, MutableList<MetadataValueWithCount>>()
+            exec(sql, listOf(VarCharColumnType() to team, VarCharColumnType() to feedbackId)) { rs ->
+                while (rs.next()) {
+                    val key = rs.getString("tag_key") ?: continue
+                    val value = rs.getString("tag_value") ?: continue
+                    val count = rs.getInt("tag_count")
+                    result.getOrPut(key) { mutableListOf() }.add(MetadataValueWithCount(value = value, count = count))
+                }
+            }
+
+            // Keep stable order (desc by count, then value) for deterministic responses
+            result.mapValues { (_, values) ->
+                values.sortedWith(compareByDescending<MetadataValueWithCount> { it.count }.thenBy { it.value })
+            }
+        }
+    }
+
     // Stats methods removed - moved to FeedbackStatsRepository
 
     
