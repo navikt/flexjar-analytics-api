@@ -1,4 +1,3 @@
-````instructions
 ---
 applyTo: "**/*.kt"
 ---
@@ -129,5 +128,3 @@ Guidelines:
 ### 🚫 Never
 
 - Introduce Kafka/Rapids & Rivers patterns in this repo without an explicit decision.
-
-````
