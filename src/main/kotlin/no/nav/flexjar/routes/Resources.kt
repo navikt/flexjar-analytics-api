@@ -48,6 +48,16 @@ class ApiV1Intern {
             /** Max unique values per key. Keys with more values are filtered out. Default 10. */
             val maxCardinality: Int? = 10
         )
+
+        @Resource("context-tags")
+        @Serializable
+        class ContextTags(
+            val parent: Feedback,
+            val feedbackId: String,
+            val team: String,
+            /** Max unique values per key. Keys with more values are filtered out. Default 10. */
+            val maxCardinality: Int? = 10
+        )
     }
 
     @Resource("stats")
