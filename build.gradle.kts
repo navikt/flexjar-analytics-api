@@ -114,7 +114,10 @@ tasks.withType<Test>().configureEach {
 
 tasks {
     shadowJar {
-        mergeServiceFiles()
+        mergeServiceFiles {
+            exclude("META-INF/services/org.flywaydb.core.extensibility.Plugin")
+        }
+
         archiveFileName.set("app.jar")
         archiveClassifier.set("")
         archiveVersion.set("")
