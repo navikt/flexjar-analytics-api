@@ -58,29 +58,27 @@ data class Question(
     val options: List<ChoiceOption>? = null
 )
 /**
- * Display type for rating questions.
- * Each type has specific valid scales.
+ * Rating variant (opinionated, fixed scales).
+ * Each variant has exactly one valid scale.
  */
 @Serializable
-enum class RatingDisplayType {
+enum class RatingVariant {
     @SerialName("emoji") EMOJI,      // Scale: 5 (fixed)
     @SerialName("thumbs") THUMBS,    // Scale: 2 (fixed)
-    @SerialName("star") STAR,        // Scale: 3, 5, 7, or 10
+    @SerialName("stars") STARS,      // Scale: 5 (fixed)
     @SerialName("nps") NPS;          // Scale: 11 (0-10)
 
     companion object {
-        /** Valid scales for each display type */
-        val validScales: Map<RatingDisplayType, Set<Int>> = mapOf(
-            EMOJI to setOf(5),
-            THUMBS to setOf(2),
-            STAR to setOf(3, 5, 7, 10),
-            NPS to setOf(11)
+        /** Fixed scale for each variant */
+        val fixedScales: Map<RatingVariant, Int> = mapOf(
+            EMOJI to 5,
+            THUMBS to 2,
+            STARS to 5,
+            NPS to 11
         )
 
-        /** Check if a display type and scale combination is valid */
-        fun isValidCombination(displayType: RatingDisplayType, scale: Int): Boolean {
-            return validScales[displayType]?.contains(scale) == true
-        }
+        /** Get the fixed scale for a variant */
+        fun getScale(variant: RatingVariant): Int = fixedScales[variant] ?: 5
     }
 }
 
@@ -90,21 +88,19 @@ sealed class AnswerValue {
     @SerialName("rating")
     data class Rating(
         val rating: Int,
-        /** Display type for rating visualization */
-        val ratingDisplayType: RatingDisplayType? = null,
-        /** Scale: 2 (thumbs), 5 (emoji/star), 7, 10 (star), 11 (nps 0-10) */
+        /** Rating variant: emoji, thumbs, stars, nps */
+        val ratingVariant: RatingVariant? = null,
+        /** Scale (fixed per variant): emoji=5, thumbs=2, stars=5, nps=11 */
         val ratingScale: Int? = null
     ) : AnswerValue() {
         init {
-            // Validate rating is within scale bounds when both are present
-            if (ratingDisplayType != null && ratingScale != null) {
-                require(RatingDisplayType.isValidCombination(ratingDisplayType, ratingScale)) {
-                    "Invalid combination: $ratingDisplayType does not support scale $ratingScale"
-                }
-                val maxRating = if (ratingDisplayType == RatingDisplayType.NPS) ratingScale - 1 else ratingScale
-                val minRating = if (ratingDisplayType == RatingDisplayType.NPS) 0 else 1
+            // Validate rating is within bounds when variant is present
+            if (ratingVariant != null) {
+                val scale = ratingScale ?: RatingVariant.getScale(ratingVariant)
+                val maxRating = if (ratingVariant == RatingVariant.NPS) scale - 1 else scale
+                val minRating = if (ratingVariant == RatingVariant.NPS) 0 else 1
                 require(rating in minRating..maxRating) {
-                    "Rating $rating is out of bounds for $ratingDisplayType (expected $minRating-$maxRating)"
+                    "Rating $rating is out of bounds for $ratingVariant (expected $minRating-$maxRating)"
                 }
             }
         }
