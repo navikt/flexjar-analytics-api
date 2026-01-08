@@ -57,12 +57,58 @@ data class Question(
     val description: String? = null,
     val options: List<ChoiceOption>? = null
 )
+/**
+ * Display type for rating questions.
+ * Each type has specific valid scales.
+ */
+@Serializable
+enum class RatingDisplayType {
+    @SerialName("emoji") EMOJI,      // Scale: 5 (fixed)
+    @SerialName("thumbs") THUMBS,    // Scale: 2 (fixed)
+    @SerialName("star") STAR,        // Scale: 3, 5, 7, or 10
+    @SerialName("nps") NPS;          // Scale: 11 (0-10)
+
+    companion object {
+        /** Valid scales for each display type */
+        val validScales: Map<RatingDisplayType, Set<Int>> = mapOf(
+            EMOJI to setOf(5),
+            THUMBS to setOf(2),
+            STAR to setOf(3, 5, 7, 10),
+            NPS to setOf(11)
+        )
+
+        /** Check if a display type and scale combination is valid */
+        fun isValidCombination(displayType: RatingDisplayType, scale: Int): Boolean {
+            return validScales[displayType]?.contains(scale) == true
+        }
+    }
+}
 
 @Serializable
 sealed class AnswerValue {
     @Serializable
     @SerialName("rating")
-    data class Rating(val rating: Int) : AnswerValue()
+    data class Rating(
+        val rating: Int,
+        /** Display type for rating visualization */
+        val ratingDisplayType: RatingDisplayType? = null,
+        /** Scale: 2 (thumbs), 5 (emoji/star), 7, 10 (star), 11 (nps 0-10) */
+        val ratingScale: Int? = null
+    ) : AnswerValue() {
+        init {
+            // Validate rating is within scale bounds when both are present
+            if (ratingDisplayType != null && ratingScale != null) {
+                require(RatingDisplayType.isValidCombination(ratingDisplayType, ratingScale)) {
+                    "Invalid combination: $ratingDisplayType does not support scale $ratingScale"
+                }
+                val maxRating = if (ratingDisplayType == RatingDisplayType.NPS) ratingScale - 1 else ratingScale
+                val minRating = if (ratingDisplayType == RatingDisplayType.NPS) 0 else 1
+                require(rating in minRating..maxRating) {
+                    "Rating $rating is out of bounds for $ratingDisplayType (expected $minRating-$maxRating)"
+                }
+            }
+        }
+    }
     
     @Serializable
     @SerialName("text")
