@@ -55,8 +55,16 @@ spec:
         databases:
           - name: flexjar
             envVarPrefix: DB
+  valkey:
+    - instance: cache
+      access: readwrite
+  envFrom:
+    - secret: flexjar-analytics-api
   env:
     - name: NAIS_CLUSTER_NAME
       value: prod-gcp
     - name: FLEXJAR_ANALYTICS_CLIENT_ID
       value: prod-gcp:team-esyfo:flexjar-analytics
+    - name: NAIS_API_GRAPHQL_URL
+      value: https://console.nav.cloud.nais.io/graphql
+

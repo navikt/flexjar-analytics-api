@@ -48,6 +48,7 @@ fun Application.configureAuth() {
                         BrukerPrincipal(
                             navIdent = "Z999999",
                             name = "Lokal Utvikler",
+                            email = "lokal.utvikler@nav.no",
                             token = "mock-token",
                             clientId = env.auth.flexjarAnalyticsClientId,
                             // Include both groups for local development
@@ -77,10 +78,16 @@ private fun validateTokenWithTexas(token: String): BrukerPrincipal? {
         
         val groups = result.groups ?: emptyList()
         logger.debug("Authenticated user ${result.NAVident} with ${groups.size} groups")
+
+        val email = result.preferredUsername
+            ?: result.upn
+            ?: result.email
+            ?: result.uniqueName
         
         BrukerPrincipal(
             navIdent = result.NAVident,
             name = result.name,
+            email = email,
             token = token,
             clientId = result.azp_name,
             groups = groups

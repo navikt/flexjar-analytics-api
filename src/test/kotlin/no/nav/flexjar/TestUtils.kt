@@ -107,6 +107,7 @@ fun Application.testModule(
                     BrukerPrincipal(
                         navIdent = "A123456",
                         name = "Test User",
+                        email = "test.user@nav.no",
                         token = tokenCredential.token,
                         clientId = "dev-gcp:team-esyfo:flexjar-analytics",
                         // Include test groups that map to teams

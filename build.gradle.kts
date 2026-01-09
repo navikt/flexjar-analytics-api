@@ -85,6 +85,9 @@ dependencies {
     // Excel export
     implementation("org.apache.poi:poi-ooxml:5.5.1")
     
+    // Valkey/Redis cache
+    implementation("redis.clients:jedis:5.2.0")
+    
     // Testing
     testImplementation("io.ktor:ktor-server-test-host:$ktorVersion")
     testImplementation("io.ktor:ktor-client-mock:$ktorVersion")

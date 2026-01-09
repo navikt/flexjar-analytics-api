@@ -6,6 +6,7 @@ import io.ktor.server.auth.*
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
 import io.ktor.util.*
+import no.nav.flexjar.integrations.nais.NaisGraphQlClient
 import org.slf4j.LoggerFactory
 
 private val log = LoggerFactory.getLogger("TeamAuthorizationPlugin")
@@ -26,6 +27,8 @@ private val log = LoggerFactory.getLogger("TeamAuthorizationPlugin")
  * ```
  */
 val TeamAuthorizationPlugin = createRouteScopedPlugin("TeamAuthorization") {
+
+    val naisClient = NaisGraphQlClient.fromEnvOrNull()
     
     on(AuthenticationChecked) { call ->
         val principal = call.principal<BrukerPrincipal>()
@@ -36,7 +39,7 @@ val TeamAuthorizationPlugin = createRouteScopedPlugin("TeamAuthorization") {
             return@on
         }
         
-        val authorizedTeams = principal.getAuthorizedTeams()
+        val authorizedTeams = resolveAuthorizedTeams(principal, naisClient)
         
         if (authorizedTeams.isEmpty()) {
             log.warn("TeamAuthorization: User ${principal.navIdent} has no authorized teams")
@@ -73,6 +76,48 @@ val TeamAuthorizationPlugin = createRouteScopedPlugin("TeamAuthorization") {
         
         log.debug("TeamAuthorization: User ${principal.navIdent} authorized for team: $team")
     }
+}
+
+private suspend fun resolveAuthorizedTeams(
+    principal: BrukerPrincipal,
+    naisClient: NaisGraphQlClient?
+): Set<String> {
+    if (naisClient == null) {
+        val teams = principal.getAuthorizedTeams()
+        log.debug("NAIS API not configured, using AD group mapping. User ${principal.navIdent} authorized for teams: $teams")
+        return teams
+    }
+
+    val email = principal.email
+
+    val teamsByEmail = if (!email.isNullOrBlank()) {
+        naisClient.getTeamSlugsForUser(email)
+    } else {
+        log.warn("User ${principal.navIdent} has no email claim, cannot lookup teams via NAIS API")
+        emptySet()
+    }
+
+    val resolvedTeams = if (teamsByEmail.isNotEmpty()) {
+        log.info("Resolved teams from NAIS API (by email) for ${principal.navIdent}: $teamsByEmail")
+        teamsByEmail
+    } else {
+        // Matches NAIS Console behavior: `me { ... on User { teams { ... }}}`.
+        // Depending on NAIS API auth configuration, `me` might not be a User.
+        val viewerTeams = naisClient.getTeamSlugsForViewer()
+        if (viewerTeams.isNotEmpty()) {
+            log.info("Resolved teams from NAIS API (viewer query) for ${principal.navIdent}: $viewerTeams")
+        }
+        viewerTeams
+    }
+
+    if (resolvedTeams.isEmpty()) {
+        // Fallback preserves current behavior during rollout and handles NAIS API outages.
+        val fallbackTeams = principal.getAuthorizedTeams()
+        log.info("NAIS API returned empty teams, falling back to AD group mapping for ${principal.navIdent}: $fallbackTeams")
+        return fallbackTeams
+    }
+
+    return resolvedTeams
 }
 
 // Attribute keys for storing authorization context

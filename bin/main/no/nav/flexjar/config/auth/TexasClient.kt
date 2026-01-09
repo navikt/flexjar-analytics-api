@@ -97,6 +97,16 @@ data class TexasIntrospectionResult(
     val NAVident: String? = null,
     /** User's display name */
     val name: String? = null,
+    /** Often contains the user's email/UPN in Azure AD tokens */
+    @SerialName("preferred_username")
+    val preferredUsername: String? = null,
+    /** Azure AD UPN (sometimes present) */
+    val upn: String? = null,
+    /** Azure AD email claim (sometimes present) */
+    val email: String? = null,
+    /** Azure AD unique_name claim (sometimes present) */
+    @SerialName("unique_name")
+    val uniqueName: String? = null,
     /** AD group UUIDs the user belongs to */
     val groups: List<String>? = null
 )

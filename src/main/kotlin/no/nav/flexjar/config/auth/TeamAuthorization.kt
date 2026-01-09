@@ -5,20 +5,24 @@ import org.slf4j.LoggerFactory
 private val log = LoggerFactory.getLogger("TeamAuthorization")
 
 /**
- * Team authorization using AD group → NAIS namespace mapping.
+ * Legacy AD group → NAIS namespace mapping.
+ * 
+ * @deprecated This manual mapping is being replaced by NAIS Console API integration.
+ * When NAIS API is configured via NAIS_API_GRAPHQL_URL and NAIS_API_KEY environment
+ * variables, team membership is resolved dynamically. This map is only used as a
+ * fallback when NAIS API is unavailable or returns empty results.
  * 
  * IMPORTANT: Team names MUST match NAIS namespace names exactly!
  * This ensures consistency between:
  * - Analytics routes (users viewing data via AD group membership)
  * - Submission routes (apps submitting data via azp_name namespace)
  * 
- * To add a new team:
+ * To add a new team (legacy mode only):
  * 1. Find the team's Azure AD group UUID (Azure portal or ask team lead)
  * 2. Add mapping: AD group UUID → NAIS namespace name
  * 3. Update flexjar-analytics frontend NAIS spec to include the group claim
  * 
- * FUTURE: This manual mapping can be replaced with NAIS API integration
- * to dynamically fetch user team memberships. See implementation_plan.md.
+ * @see TeamAuthorizationPlugin for NAIS API integration
  */
 private val GROUP_TO_TEAM = mapOf(
     // isyfo - Intern Sykefraværsoppfølging (namespace: teamsykefravr)

@@ -122,7 +122,13 @@ The token's `azp_name` claim identifies your app and determines which team the f
 
 ### For Analytics Dashboard Access {#getting-access}
 
-To access the Flexjar Analytics dashboard, your team must be onboarded:
+To access the Flexjar Analytics dashboard, your team must be onboarded.
+
+There are currently two supported approaches:
+
+#### Option A (legacy): AD group allow-listing
+
+This is the current onboarding flow (manual mapping + group allow-list).
 
 #### 1. Add your team's AD group to the configuration
 
@@ -137,6 +143,42 @@ You must be a member of your team's AD group to access analytics. Contact your t
 #### 3. Log in with your NAV account
 
 Once your team is onboarded, simply log in at the dashboard URL with your NAV account.
+
+#### Option B (recommended): NAIS API-backed team membership
+
+If enabled, the backend can authorize analytics access by looking up team membership via the NAIS Console GraphQL API, using the user's email from the Azure token claims (e.g. `preferred_username`). This allows scaling without updating `GROUP_TO_TEAM` for every new team.
+
+**Setup:**
+
+1. Create a secret in NAIS Console named `flexjar-analytics-api` (in both dev and prod) with keys:
+   - `NAIS_API_GRAPHQL_URL` (example: `https://console.nav.cloud.nais.io/graphql`)
+   - `NAIS_API_KEY` (get this from NAIS Console)
+
+2. The manifests already reference this secret via `spec.envFrom`.
+
+**How it works:**
+
+1. When a user logs in, the backend extracts their email from the Azure token
+2. The NAIS Console API is queried for the user's team memberships
+3. Results are cached for 5 minutes to reduce API load
+4. If the API call fails, the backend falls back to legacy AD group mapping
+
+**Observability:**
+
+The NAIS API integration exposes Prometheus metrics at `/internal/prometheus`:
+
+| Metric | Description |
+|--------|-------------|
+| `nais_api_calls_total` | Total number of NAIS API calls |
+| `nais_api_errors_total` | Total number of NAIS API errors |
+| `nais_api_call_duration_seconds` | Duration of NAIS API calls |
+| `nais_api_cache_hits_total` | Number of cache hits |
+| `nais_api_cache_misses_total` | Number of cache misses |
+
+**Fallback behavior:**
+
+When NAIS API is enabled but a lookup fails (e.g. missing email claim or NAIS API outage), the backend falls back to the legacy AD group mapping to avoid breaking existing access during rollout.
+
 
 ### ⚠️ AD Group Configuration (Security Notice)
 
