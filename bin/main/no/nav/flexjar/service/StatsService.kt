@@ -1,23 +1,57 @@
 package no.nav.flexjar.service
 
+import kotlinx.serialization.encodeToString
+import kotlinx.serialization.json.Json
 import no.nav.flexjar.domain.*
+import no.nav.flexjar.integrations.valkey.StatsCache
+import no.nav.flexjar.integrations.valkey.ValkeyStatsCache
 import no.nav.flexjar.repository.FeedbackRepository
 import no.nav.flexjar.repository.FeedbackStatsRepository
+import java.time.Duration
 import java.time.LocalDate
 import java.time.temporal.ChronoUnit
+
+private val json = Json { 
+    ignoreUnknownKeys = true 
+    encodeDefaults = true
+}
 
 /**
  * Service layer for feedback statistics.
  * Contains business logic for calculating and aggregating feedback statistics.
+ * 
+ * Uses StatsCache (Valkey with in-memory fallback) to cache expensive aggregations.
+ * Default TTL: 5 minutes.
  */
 class StatsService(
     private val feedbackRepository: FeedbackRepository = FeedbackRepository(),
-    private val statsRepository: FeedbackStatsRepository = FeedbackStatsRepository()
+    private val statsRepository: FeedbackStatsRepository = FeedbackStatsRepository(),
+    private val statsCache: StatsCache = ValkeyStatsCache.fromEnvOrFallback(),
+    private val cacheTtl: Duration = Duration.ofMinutes(5)
 ) {
     /**
      * Get comprehensive feedback statistics for the given query.
+     * Results are cached for 5 minutes.
      */
     fun getStats(query: StatsQuery): FeedbackStats {
+        val cacheKey = "stats:${query.hashCode()}"
+        
+        // Try cache first
+        statsCache.get(cacheKey)?.let { cached ->
+            return try {
+                json.decodeFromString<FeedbackStats>(cached)
+            } catch (e: Exception) {
+                computeStats(query).also { statsCache.set(cacheKey, json.encodeToString(it), cacheTtl) }
+            }
+        }
+        
+        // Compute and cache
+        return computeStats(query).also { 
+            statsCache.set(cacheKey, json.encodeToString(it), cacheTtl) 
+        }
+    }
+    
+    private fun computeStats(query: StatsQuery): FeedbackStats {
         val stats = statsRepository.getStats(query)
         
         val averageRating = calculateAverageRating(stats.byRating)
