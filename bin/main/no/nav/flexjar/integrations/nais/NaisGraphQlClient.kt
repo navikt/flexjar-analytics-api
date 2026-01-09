@@ -349,9 +349,9 @@ class NaisGraphQlClient private constructor(
          * - NAIS_API_KEY: API key for authentication
          * 
          * Optional env vars (for Valkey cache):
-         * - VALKEY_URI_CACHE: Valkey connection URI
-         * - VALKEY_USERNAME_CACHE: Valkey username
-         * - VALKEY_PASSWORD_CACHE: Valkey password
+         * - VALKEY_URI_FLEXJAR_CACHE: Valkey connection URI
+         * - VALKEY_USERNAME_FLEXJAR_CACHE: Valkey username
+         * - VALKEY_PASSWORD_FLEXJAR_CACHE: Valkey password
          */
         fun fromEnvOrNull(): NaisGraphQlClient? {
             val url = System.getenv("NAIS_API_GRAPHQL_URL")?.takeIf { it.isNotBlank() }

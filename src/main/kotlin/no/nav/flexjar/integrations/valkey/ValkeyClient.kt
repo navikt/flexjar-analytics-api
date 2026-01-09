@@ -185,18 +185,19 @@ class ValkeyTeamCache private constructor(
          */
         fun fromEnvOrFallback(): TeamCache {
             // NAIS provides VALKEY_URI_<instance> format
-            val uri = System.getenv("VALKEY_URI_CACHE")
-                ?: System.getenv("REDIS_URI_CACHE")
+            // Instance name in nais.yaml is "flexjar-cache", becomes FLEXJAR_CACHE in env vars
+            val uri = System.getenv("VALKEY_URI_FLEXJAR_CACHE")
+                ?: System.getenv("REDIS_URI_FLEXJAR_CACHE")
             
             if (uri.isNullOrBlank()) {
                 log.info("Valkey not configured, using in-memory cache")
                 return InMemoryTeamCache()
             }
             
-            val username = System.getenv("VALKEY_USERNAME_CACHE")
-                ?: System.getenv("REDIS_USERNAME_CACHE")
-            val password = System.getenv("VALKEY_PASSWORD_CACHE")
-                ?: System.getenv("REDIS_PASSWORD_CACHE")
+            val username = System.getenv("VALKEY_USERNAME_FLEXJAR_CACHE")
+                ?: System.getenv("REDIS_USERNAME_FLEXJAR_CACHE")
+            val password = System.getenv("VALKEY_PASSWORD_FLEXJAR_CACHE")
+                ?: System.getenv("REDIS_PASSWORD_FLEXJAR_CACHE")
             
             return try {
                 // Jedis supports redis:// and rediss:// URIs
