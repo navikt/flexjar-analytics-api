@@ -55,7 +55,7 @@ fun Route.filterRoutes(
         val cacheKey = "team=${team}".lowercase()
 
         bootstrapCache.get(cacheKey)?.let { cachedJson ->
-            call.response.headers.append(HttpHeaders.CacheControl, "private, max-age=600")
+            call.response.headers.append(HttpHeaders.CacheControl, "private, max-age=300")
             call.respondText(cachedJson, ContentType.Application.Json)
             return@get
         }
@@ -75,8 +75,8 @@ fun Route.filterRoutes(
             tags = tags.sorted()
         )
 
-        bootstrapCache.set(cacheKey, json.encodeToString(response), ttl = Duration.ofMinutes(10))
-        call.response.headers.append(HttpHeaders.CacheControl, "private, max-age=600")
+        bootstrapCache.set(cacheKey, json.encodeToString(response), ttl = Duration.ofMinutes(5))
+        call.response.headers.append(HttpHeaders.CacheControl, "private, max-age=300")
         
         call.respond(response)
     }
