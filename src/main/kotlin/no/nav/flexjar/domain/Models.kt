@@ -283,8 +283,8 @@ data class FieldStatDetails(
 
 @Serializable
 data class StatsPeriod(
-    val from: String?,
-    val to: String?,
+    val fromDate: String?,
+    val toDate: String?,
     val days: Int
 )
 

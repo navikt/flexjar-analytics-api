@@ -120,8 +120,8 @@ class StatsService(
             bySurveyId = if (stats.masked) emptyMap() else stats.bySurveyId,
             averageRating = if (stats.masked) null else averageRating,
             period = StatsPeriod(
-                from = query.fromDate,
-                to = query.toDate,
+                fromDate = query.fromDate,
+                toDate = query.toDate,
                 days = days
             ),
             surveyType = stats.surveyType?.let { 
