@@ -1,12 +1,19 @@
 package no.nav.flexjar.routes
 
+import io.ktor.http.ContentType
+import io.ktor.http.HttpHeaders
 import io.ktor.server.resources.get
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.encodeToString
+import kotlinx.serialization.json.Json
 import no.nav.flexjar.config.auth.authorizedTeam
+import no.nav.flexjar.integrations.valkey.StringCache
+import no.nav.flexjar.integrations.valkey.ValkeyStringCache
 import no.nav.flexjar.repository.FeedbackRepository
 import java.time.Instant
+import java.time.Duration
 
 /**
  * Response for GET /api/v1/intern/filters/bootstrap
@@ -26,6 +33,12 @@ data class FilterBootstrapResponse(
 )
 
 private val defaultRepository = FeedbackRepository()
+private val bootstrapCache: StringCache = ValkeyStringCache.fromEnvOrFallback(keyPrefix = "filters:bootstrap:")
+
+private val json = Json {
+    ignoreUnknownKeys = true
+    encodeDefaults = true
+}
 
 /**
  * Routes for filter bootstrap and facets.
@@ -38,6 +51,14 @@ fun Route.filterRoutes(
 ) {
     get<ApiV1Intern.Filters.Bootstrap> {
         val team = call.authorizedTeam
+
+        val cacheKey = "team=${team}".lowercase()
+
+        bootstrapCache.get(cacheKey)?.let { cachedJson ->
+            call.response.headers.append(HttpHeaders.CacheControl, "private, max-age=600")
+            call.respondText(cachedJson, ContentType.Application.Json)
+            return@get
+        }
 
         // Each repository call manages its own transaction.
         // This endpoint is designed for long caching, so multiple DB round-trips are acceptable.
@@ -53,6 +74,9 @@ fun Route.filterRoutes(
             surveysByApp = surveysByApp.mapValues { it.value.sorted() }.toSortedMap(),
             tags = tags.sorted()
         )
+
+        bootstrapCache.set(cacheKey, json.encodeToString(response), ttl = Duration.ofMinutes(10))
+        call.response.headers.append(HttpHeaders.CacheControl, "private, max-age=600")
         
         call.respond(response)
     }

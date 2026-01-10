@@ -7,6 +7,8 @@ import no.nav.flexjar.integrations.valkey.StatsCache
 import no.nav.flexjar.integrations.valkey.ValkeyStatsCache
 import no.nav.flexjar.repository.FeedbackRepository
 import no.nav.flexjar.repository.FeedbackStatsRepository
+import java.net.URLEncoder
+import java.nio.charset.StandardCharsets
 import java.time.Duration
 import java.time.LocalDate
 import java.time.temporal.ChronoUnit
@@ -29,12 +31,29 @@ class StatsService(
     private val statsCache: StatsCache = ValkeyStatsCache.fromEnvOrFallback(),
     private val cacheTtl: Duration = Duration.ofMinutes(5)
 ) {
+    private fun StatsQuery.toCacheKey(): String {
+        fun enc(value: String): String = URLEncoder.encode(value, StandardCharsets.UTF_8)
+
+        val parts = listOf(
+            "team" to team,
+            "app" to app,
+            "fromDate" to fromDate,
+            "toDate" to toDate,
+            "surveyId" to surveyId,
+            "deviceType" to deviceType
+        )
+            .filter { (_, value) -> value != null }
+            .map { (key, value) -> "${enc(key)}=${enc(value!!)}" }
+
+        return parts.joinToString("&")
+    }
+
     /**
      * Get comprehensive feedback statistics for the given query.
      * Results are cached for 5 minutes.
      */
     fun getStats(query: StatsQuery): FeedbackStats {
-        val cacheKey = "stats:${query.hashCode()}"
+        val cacheKey = query.toCacheKey()
         
         // Try cache first
         statsCache.get(cacheKey)?.let { cached ->
