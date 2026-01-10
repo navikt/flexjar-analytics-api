@@ -31,6 +31,12 @@ class StatsService(
     private val statsCache: StatsCache = ValkeyStatsCache.fromEnvOrFallback(),
     private val cacheTtl: Duration = Duration.ofMinutes(5)
 ) {
+    private val overviewCacheTtl: Duration = Duration.ofMinutes(2)
+    private val ratingsCacheTtl: Duration = Duration.ofMinutes(2)
+    private val timelineCacheTtl: Duration = Duration.ofMinutes(2)
+    private val topTasksCacheTtl: Duration = Duration.ofMinutes(5)
+    private val surveyTypesCacheTtl: Duration = Duration.ofMinutes(10)
+
     private fun StatsQuery.toCacheKey(): String {
         fun enc(value: String): String = URLEncoder.encode(value, StandardCharsets.UTF_8)
 
@@ -46,6 +52,25 @@ class StatsService(
             .map { (key, value) -> "${enc(key)}=${enc(value!!)}" }
 
         return parts.joinToString("&")
+    }
+
+    private inline fun <reified T> getOrComputeCached(
+        prefix: String,
+        query: StatsQuery,
+        ttl: Duration,
+        crossinline compute: () -> T
+    ): T {
+        val cacheKey = "$prefix:${query.toCacheKey()}"
+
+        statsCache.get(cacheKey)?.let { cached ->
+            return try {
+                json.decodeFromString<T>(cached)
+            } catch (e: Exception) {
+                compute().also { statsCache.set(cacheKey, json.encodeToString(it), ttl) }
+            }
+        }
+
+        return compute().also { statsCache.set(cacheKey, json.encodeToString(it), ttl) }
     }
 
     /**
@@ -110,65 +135,75 @@ class StatsService(
      * Get stats overview (new consolidated endpoint per GPT contract).
      */
     fun getStatsOverview(query: StatsQuery): StatsOverviewResponse {
-        val stats = statsRepository.getStats(query)
-        
-        // Calculate low rating count (ratings 1-2)
-        val lowRatingCount = stats.byRating
-            .filter { (rating, _) -> rating.toIntOrNull()?.let { it <= 2 } ?: false }
-            .values.sum()
-        
-        return StatsOverviewResponse(
-            generatedAt = java.time.Instant.now().toString(),
-            range = if (query.fromDate != null || query.toDate != null) {
-                DateRange(fromDate = query.fromDate, toDate = query.toDate)
-            } else null,
-            totals = StatsTotals(
-                feedbackCount = stats.totalCount.toInt(),
-                textCount = stats.countWithText.toInt(),
-                lowRatingCount = lowRatingCount
-            ),
-            ratingDistribution = stats.byRating
-        )
+        return getOrComputeCached(prefix = "overview", query = query, ttl = overviewCacheTtl) {
+            val stats = statsRepository.getStats(query)
+
+            // Calculate low rating count (ratings 1-2)
+            val lowRatingCount = stats.byRating
+                .filter { (rating, _) -> rating.toIntOrNull()?.let { it <= 2 } ?: false }
+                .values.sum()
+
+            StatsOverviewResponse(
+                generatedAt = java.time.Instant.now().toString(),
+                range = if (query.fromDate != null || query.toDate != null) {
+                    DateRange(fromDate = query.fromDate, toDate = query.toDate)
+                } else null,
+                totals = StatsTotals(
+                    feedbackCount = stats.totalCount.toInt(),
+                    textCount = stats.countWithText.toInt(),
+                    lowRatingCount = lowRatingCount
+                ),
+                ratingDistribution = stats.byRating
+            )
+        }
     }
 
     /**
      * Get rating distribution for the given query.
      */
     fun getRatingDistribution(query: StatsQuery): RatingDistribution {
-        val stats = statsRepository.getStats(query)
-        
-        return RatingDistribution(
-            distribution = stats.byRating,
-            average = calculateAverageRating(stats.byRating),
-            total = stats.byRating.values.sum()
-        )
+        return getOrComputeCached(prefix = "ratings", query = query, ttl = ratingsCacheTtl) {
+            val stats = statsRepository.getStats(query)
+
+            RatingDistribution(
+                distribution = stats.byRating,
+                average = calculateAverageRating(stats.byRating),
+                total = stats.byRating.values.sum()
+            )
+        }
     }
 
     /**
      * Get timeline data for the given query.
      */
     fun getTimeline(query: StatsQuery): TimelineResponse {
-        val stats = statsRepository.getStats(query)
-        
-        return TimelineResponse(
-            data = stats.byDate.map { (date, count) ->
-                TimelineEntry(date = date, count = count)
-            }.sortedBy { it.date }
-        )
+        return getOrComputeCached(prefix = "timeline", query = query, ttl = timelineCacheTtl) {
+            val stats = statsRepository.getStats(query)
+
+            TimelineResponse(
+                data = stats.byDate.map { (date, count) ->
+                    TimelineEntry(date = date, count = count)
+                }.sortedBy { it.date }
+            )
+        }
     }
 
     /**
      * Get Top Tasks statistics for the given query.
      */
     fun getTopTasksStats(query: StatsQuery): TopTasksResponse {
-        return statsRepository.getTopTasksStats(query)
+        return getOrComputeCached(prefix = "topTasks", query = query, ttl = topTasksCacheTtl) {
+            statsRepository.getTopTasksStats(query)
+        }
     }
 
     /**
      * Get Survey Type distribution for the given query.
      */
     fun getSurveyTypeDistribution(query: StatsQuery): SurveyTypeDistribution {
-        return statsRepository.getSurveyTypeDistribution(query)
+        return getOrComputeCached(prefix = "surveyTypes", query = query, ttl = surveyTypesCacheTtl) {
+            statsRepository.getSurveyTypeDistribution(query)
+        }
     }
 
     /**
