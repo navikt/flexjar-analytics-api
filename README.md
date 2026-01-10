@@ -53,7 +53,7 @@ docker run -d --name flexjar-db \
 | `app` | string | - | Filter by app |
 | `from` | ISO date | - | Start date |
 | `to` | ISO date | - | End date |
-| `feedbackId` | string | - | Filter by survey ID |
+| `surveyId` | string | - | Filter by survey ID |
 | `medTekst` | boolean | `false` | Only with text feedback |
 | `stjerne` | boolean | `false` | Only starred |
 | `tags` | string | - | Comma-separated tags |
@@ -65,12 +65,7 @@ docker run -d --name flexjar-db \
 
 | Endpoint | Description |
 |----------|-------------|
-| `POST /api/v1/feedback` | Submit feedback (legacy) |
-| `POST /api/v2/feedback` | Submit feedback (returns ID) |
-| `PUT /api/v2/feedback/{id}` | Update feedback |
-| `POST /api/v1/feedback/azure` | Azure variant |
-| `POST /api/azure/v2/feedback` | Azure variant |
-| `PUT /api/azure/v2/feedback/{id}` | Azure update |
+| `POST /api/v1/feedback` | Submit feedback (schemaVersion=1, returns created ID) |
 
 ## 🔐 Security & Access
 

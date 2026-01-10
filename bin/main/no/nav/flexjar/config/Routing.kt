@@ -8,6 +8,8 @@ import no.nav.flexjar.config.auth.TeamAuthorizationPlugin
 import no.nav.flexjar.routes.discoveryRoutes
 import no.nav.flexjar.routes.feedbackRoutes
 import no.nav.flexjar.routes.exportRoutes
+import no.nav.flexjar.routes.filterRoutes
+import no.nav.flexjar.routes.surveyFacetRoutes
 import no.nav.flexjar.routes.statsRoutes
 import no.nav.flexjar.routes.internalRoutes
 import no.nav.flexjar.routes.submissionRoutes
@@ -31,10 +33,13 @@ fun Application.configureRouting() {
             // Enforce team authorization based on user's AD groups
             install(TeamAuthorizationPlugin)
             
+            filterRoutes()
             feedbackRoutes()
+            surveyFacetRoutes()
             statsRoutes()
             exportRoutes()
             discoveryRoutes()
         }
     }
 }
+

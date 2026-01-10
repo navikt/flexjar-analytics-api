@@ -56,11 +56,11 @@ paths:
             type: string
             format: date
           description: End date (ISO format)
-        - name: feedbackId
+        - name: surveyId
           in: query
           schema:
             type: string
-          description: Filter by survey/feedback ID
+          description: Filter by survey ID
         - name: medTekst
           in: query
           schema:
@@ -257,7 +257,7 @@ paths:
           schema:
             type: string
             format: date
-        - name: feedbackId
+        - name: surveyId
           in: query
           schema:
             type: string
@@ -327,23 +327,8 @@ paths:
   /api/v1/feedback:
     post:
       tags: [Submission]
-      summary: Submit feedback (legacy)
-      description: Submit feedback from widget. Returns 200 OK.
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/FeedbackSubmission'
-      responses:
-        '200':
-          description: Feedback received
-
-  /api/v2/feedback:
-    post:
-      tags: [Submission]
       summary: Submit feedback
-      description: Submit feedback from widget. Returns created ID.
+      description: Canonical widget submission payload (schemaVersion=1). Returns created ID.
       requestBody:
         required: true
         content:
@@ -539,20 +524,89 @@ components:
     FeedbackSubmission:
       type: object
       properties:
-        feedbackId:
+        schemaVersion:
+          type: integer
+          enum: [1]
+        surveyId:
           type: string
           description: Survey identifier
-        svar:
+        surveyType:
+          type: string
+          enum: [rating, topTasks, discovery, taskPriority, custom]
+        submittedAt:
+          type: string
+          format: date-time
+        startedAt:
+          type: string
+          format: date-time
+          nullable: true
+        timeToCompleteMs:
           type: integer
-          description: Rating (1-5)
-        feedback:
-          type: string
-          description: Main text feedback
-        app:
-          type: string
-        team:
-          type: string
-      required: [feedbackId]
+          nullable: true
+        context:
+          type: object
+          properties:
+            url:
+              type: string
+              nullable: true
+            pathname:
+              type: string
+              nullable: true
+            deviceType:
+              type: string
+              enum: [mobile, tablet, desktop]
+              nullable: true
+            viewport:
+              type: object
+              properties:
+                width:
+                  type: integer
+                height:
+                  type: integer
+            tags:
+              type: object
+              additionalProperties: true
+        answers:
+          type: array
+          items:
+            type: object
+            properties:
+              fieldId:
+                type: string
+              fieldType:
+                type: string
+                enum: [RATING, TEXT, SINGLE_CHOICE, MULTI_CHOICE, DATE]
+              question:
+                type: object
+                properties:
+                  label:
+                    type: string
+                  description:
+                    type: string
+                    nullable: true
+                  options:
+                    type: array
+                    nullable: true
+                    items:
+                      type: object
+                      properties:
+                        id:
+                          type: string
+                        label:
+                          type: string
+              value:
+                type: object
+                description: Polymorphic answer value. See `type` discriminator.
+                properties:
+                  type:
+                    type: string
+                    enum: [rating, text, singleChoice, multiChoice, date]
+        metadata:
+          type: object
+          nullable: true
+          additionalProperties:
+            type: string
+      required: [schemaVersion, surveyId, surveyType, submittedAt, answers]
 
     ApiError:
       type: object

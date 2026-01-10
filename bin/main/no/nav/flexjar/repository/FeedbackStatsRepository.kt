@@ -29,8 +29,12 @@ class FeedbackStatsRepository {
             
             val textQuery = FeedbackTable.selectAll()
             applyStatsFilters(textQuery, query)
-            textQuery.andWhere { JsonExtract(FeedbackTable.feedbackJson, listOf("feedback")).isNotNull() }
-            textQuery.andWhere { JsonExtract(FeedbackTable.feedbackJson, listOf("feedback")) neq "" }
+            textQuery.andWhere {
+                JsonbPathExists(
+                    FeedbackTable.feedbackJson,
+                    "$.answers[*] ? (@.value.type == \"text\" && @.value.text != \"\")"
+                )
+            }
             val countWithText = textQuery.count()
             
             val typeQuery = FeedbackTable.selectAll()
@@ -42,7 +46,10 @@ class FeedbackStatsRepository {
                  jsonObj["surveyType"]?.jsonPrimitive?.content ?: "custom"
             }
 
-            val ratingExpr = JsonExtract(FeedbackTable.feedbackJson, listOf("svar"))
+            val ratingExpr = JsonbPathQueryFirstText(
+                FeedbackTable.feedbackJson,
+                "$.answers[*] ? (@.value.type == \"rating\").value.rating"
+            )
             val ratingQuery = FeedbackTable.select(ratingExpr, FeedbackTable.id.count())
             applyStatsFilters(ratingQuery, query)
             ratingQuery.andWhere { ratingExpr.isNotNull() }
@@ -74,16 +81,16 @@ class FeedbackStatsRepository {
                      row[dateExpr].toString() to row[FeedbackTable.id.count()].toInt()
                  }
                  
-            val feedbackIdExpr = JsonExtract(FeedbackTable.feedbackJson, listOf("feedbackId"))
-            val fidQuery = FeedbackTable.select(feedbackIdExpr, FeedbackTable.id.count())
+            val surveyIdExpr = JsonExtract(FeedbackTable.feedbackJson, listOf("surveyId"))
+            val fidQuery = FeedbackTable.select(surveyIdExpr, FeedbackTable.id.count())
             applyStatsFilters(fidQuery, query)
-            fidQuery.andWhere { feedbackIdExpr.isNotNull() }
-            val byFeedbackId = fidQuery
-                 .groupBy(feedbackIdExpr)
+            fidQuery.andWhere { surveyIdExpr.isNotNull() }
+            val bySurveyId = fidQuery
+                 .groupBy(surveyIdExpr)
                  .orderBy(FeedbackTable.id.count() to SortOrder.DESC)
                  .limit(20)
                  .associate { row ->
-                     (row[feedbackIdExpr] ?: "unknown") to row[FeedbackTable.id.count()].toInt()
+                     (row[surveyIdExpr] ?: "unknown") to row[FeedbackTable.id.count()].toInt()
                  }
 
             FeedbackStatsResult(
@@ -93,7 +100,7 @@ class FeedbackStatsRepository {
                 byRating = byRating,
                 byApp = byApp,
                 byDate = byDate,
-                byFeedbackId = byFeedbackId,
+                bySurveyId = bySurveyId,
                 masked = shouldMask,
                 threshold = MIN_AGGREGATION_THRESHOLD
             )
@@ -142,24 +149,48 @@ class FeedbackStatsRepository {
 
     
     private fun applyStatsFilters(query: Query, criteria: StatsQuery) {
-         query.andWhere { FeedbackTable.team eq criteria.team }
-         criteria.app?.let { query.andWhere { FeedbackTable.app eq it } }
-         
-         criteria.feedbackId?.let { fid ->
-             query.andWhere { JsonExtract(FeedbackTable.feedbackJson, listOf("feedbackId")) eq fid }
-         }
-         
-         criteria.from?.let { from ->
-             query.andWhere { FeedbackTable.opprettet greaterEq Instant.parse(from) }
-         }
-         
-         criteria.to?.let { to ->
-             query.andWhere { FeedbackTable.opprettet lessEq Instant.parse(to) } 
-         }
-         
-         criteria.deviceType?.let { device ->
-             query.andWhere { JsonExtract(FeedbackTable.feedbackJson, listOf("context", "deviceType")) eq device }
-         }
+        query.andWhere { FeedbackTable.team eq criteria.team }
+        criteria.app?.let { query.andWhere { FeedbackTable.app eq it } }
+        
+        // Survey ID filter
+        criteria.surveyId?.let { surveyId ->
+            query.andWhere { JsonExtract(FeedbackTable.feedbackJson, listOf("surveyId")) eq surveyId }
+        }
+        
+        // Date range filter - convert YYYY-MM-DD to UTC Instants (Europe/Oslo)
+        criteria.fromDate?.let { fromDate ->
+            try {
+                val localDate = java.time.LocalDate.parse(fromDate)
+                val startOfDay = localDate.atStartOfDay(java.time.ZoneId.of("Europe/Oslo")).toInstant()
+                query.andWhere { FeedbackTable.opprettet greaterEq startOfDay }
+            } catch (e: Exception) {
+                // If parsing fails, try as instant (backward compatibility)
+                try {
+                    query.andWhere { FeedbackTable.opprettet greaterEq Instant.parse(fromDate) }
+                } catch (_: Exception) { }
+            }
+        }
+        
+        criteria.toDate?.let { toDate ->
+            try {
+                val localDate = java.time.LocalDate.parse(toDate)
+                // Inclusive date filter: < start of next day in Europe/Oslo
+                val nextDayStart = localDate.plusDays(1)
+                    .atStartOfDay(java.time.ZoneId.of("Europe/Oslo"))
+                    .toInstant()
+                query.andWhere { FeedbackTable.opprettet less nextDayStart }
+            } catch (e: Exception) {
+                // If parsing fails, try as instant (backward compatibility)
+                try {
+                    query.andWhere { FeedbackTable.opprettet lessEq Instant.parse(toDate) }
+                } catch (_: Exception) { }
+            }
+        }
+        
+        // Device type filter
+        criteria.deviceType?.let { device ->
+            query.andWhere { JsonExtract(FeedbackTable.feedbackJson, listOf("context", "deviceType")) eq device }
+        }
     }
     
     // DTO methods removed - using Extensions.kt

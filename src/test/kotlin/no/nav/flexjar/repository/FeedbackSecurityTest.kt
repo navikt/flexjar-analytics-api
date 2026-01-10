@@ -83,7 +83,7 @@ class FeedbackSecurityTest : DescribeSpec({
         it("should redact fødselsnummer from answers") {
             val feedbackJson = """
                 {
-                    "feedbackId": "test-survey",
+                    "surveyId": "test-survey",
                     "answers": [
                         {
                             "fieldId": "feedback",
@@ -102,12 +102,19 @@ class FeedbackSecurityTest : DescribeSpec({
             retrieved?.feedbackJson shouldNotContain "12345678901"
         }
         
-        it("should redact email from legacy feedback field") {
+        it("should redact email from text answers") {
             val feedbackJson = """
                 {
-                    "feedbackId": "test-survey",
-                    "feedback": "Kontakt meg på test.user@example.com",
-                    "answers": []
+                    "surveyId": "test-survey",
+                    "answers": [
+                        {
+                            "fieldId": "feedback",
+                            "value": {
+                                "type": "text",
+                                "text": "Kontakt meg på test.user@example.com"
+                            }
+                        }
+                    ]
                 }
             """.trimIndent()
             
@@ -121,7 +128,7 @@ class FeedbackSecurityTest : DescribeSpec({
         it("should redact phone numbers") {
             val feedbackJson = """
                 {
-                    "feedbackId": "test-survey",
+                    "surveyId": "test-survey",
                     "answers": [
                         {
                             "fieldId": "comment",
@@ -143,7 +150,7 @@ class FeedbackSecurityTest : DescribeSpec({
         it("should preserve non-text answers") {
             val feedbackJson = """
                 {
-                    "feedbackId": "test-survey",
+                    "surveyId": "test-survey",
                     "answers": [
                         {
                             "fieldId": "rating",
@@ -163,7 +170,7 @@ class FeedbackSecurityTest : DescribeSpec({
         }
         
         it("should handle JSON without answers gracefully") {
-            val feedbackJson = """{"feedbackId": "simple", "svar": 4}"""
+            val feedbackJson = """{"surveyId": "simple"}"""
             
             val saved = repository.save(feedbackJson, "team-test", "test-app")
             val retrieved = repository.findRawById(saved)

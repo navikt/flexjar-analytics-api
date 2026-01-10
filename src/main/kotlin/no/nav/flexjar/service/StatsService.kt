@@ -55,7 +55,7 @@ class StatsService(
         val stats = statsRepository.getStats(query)
         
         val averageRating = calculateAverageRating(stats.byRating)
-        val days = calculateDays(query.from, query.to)
+        val days = calculateDays(query.fromDate, query.toDate)
         
         // Build privacy info if data should be masked
         val privacy = if (stats.masked) {
@@ -73,17 +73,42 @@ class StatsService(
             byRating = if (stats.masked) emptyMap() else stats.byRating,
             byApp = if (stats.masked) emptyMap() else stats.byApp,
             byDate = if (stats.masked) emptyMap() else stats.byDate,
-            byFeedbackId = if (stats.masked) emptyMap() else stats.byFeedbackId,
+            bySurveyId = if (stats.masked) emptyMap() else stats.bySurveyId,
             averageRating = if (stats.masked) null else averageRating,
             period = StatsPeriod(
-                from = query.from,
-                to = query.to,
+                from = query.fromDate,
+                to = query.toDate,
                 days = days
             ),
             surveyType = stats.surveyType?.let { 
                 try { SurveyType.valueOf(it.uppercase()) } catch(e: Exception) { SurveyType.CUSTOM }
             },
             privacy = privacy
+        )
+    }
+
+    /**
+     * Get stats overview (new consolidated endpoint per GPT contract).
+     */
+    fun getStatsOverview(query: StatsQuery): StatsOverviewResponse {
+        val stats = statsRepository.getStats(query)
+        
+        // Calculate low rating count (ratings 1-2)
+        val lowRatingCount = stats.byRating
+            .filter { (rating, _) -> rating.toIntOrNull()?.let { it <= 2 } ?: false }
+            .values.sum()
+        
+        return StatsOverviewResponse(
+            generatedAt = java.time.Instant.now().toString(),
+            range = if (query.fromDate != null || query.toDate != null) {
+                DateRange(fromDate = query.fromDate, toDate = query.toDate)
+            } else null,
+            totals = StatsTotals(
+                feedbackCount = stats.totalCount.toInt(),
+                textCount = stats.countWithText.toInt(),
+                lowRatingCount = lowRatingCount
+            ),
+            ratingDistribution = stats.byRating
         )
     }
 

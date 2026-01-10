@@ -25,14 +25,31 @@ class DiscoveryStatsRepository {
                 JsonExtract(FeedbackTable.feedbackJson, listOf("surveyType")) eq "discovery" 
             }
             
-            query.feedbackId?.let { fid ->
-                dbQuery.andWhere { JsonExtract(FeedbackTable.feedbackJson, listOf("feedbackId")) eq fid }
+            query.surveyId?.let { surveyId ->
+                dbQuery.andWhere { JsonExtract(FeedbackTable.feedbackJson, listOf("surveyId")) eq surveyId }
             }
-            query.from?.let { from ->
-                dbQuery.andWhere { FeedbackTable.opprettet greaterEq Instant.parse(from) }
+            
+            // Date range filter - convert YYYY-MM-DD to UTC Instants (Europe/Oslo)
+            query.fromDate?.let { fromDate ->
+                try {
+                    val localDate = java.time.LocalDate.parse(fromDate)
+                    val startOfDay = localDate.atStartOfDay(java.time.ZoneId.of("Europe/Oslo")).toInstant()
+                    dbQuery.andWhere { FeedbackTable.opprettet greaterEq startOfDay }
+                } catch (e: Exception) {
+                    try { dbQuery.andWhere { FeedbackTable.opprettet greaterEq Instant.parse(fromDate) } } catch (_: Exception) { }
+                }
             }
-            query.to?.let { to ->
-                dbQuery.andWhere { FeedbackTable.opprettet lessEq Instant.parse(to) }
+            query.toDate?.let { toDate ->
+                try {
+                    val localDate = java.time.LocalDate.parse(toDate)
+                    // Inclusive date filter: < start of next day in Europe/Oslo
+                    val nextDayStart = localDate.plusDays(1)
+                        .atStartOfDay(java.time.ZoneId.of("Europe/Oslo"))
+                        .toInstant()
+                    dbQuery.andWhere { FeedbackTable.opprettet less nextDayStart }
+                } catch (e: Exception) {
+                    try { dbQuery.andWhere { FeedbackTable.opprettet lessEq Instant.parse(toDate) } } catch (_: Exception) { }
+                }
             }
             query.deviceType?.let { device ->
                 dbQuery.andWhere { JsonExtract(FeedbackTable.feedbackJson, listOf("context", "deviceType")) eq device }

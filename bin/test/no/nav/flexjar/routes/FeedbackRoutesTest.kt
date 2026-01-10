@@ -118,15 +118,15 @@ class FeedbackRoutesTest : FunSpec({
         testApplication {
             application { testModule() }
             
-            val feedbackId = UUID.randomUUID().toString()
-            insertTestFeedback(id = feedbackId, team = "flex")
+            val id = UUID.randomUUID().toString()
+            insertTestFeedback(id = id, team = "flex")
             
-            val response = createTestClient().get("/api/v1/intern/feedback/$feedbackId") {
+            val response = createTestClient().get("/api/v1/intern/feedback/$id") {
                 header(HttpHeaders.Authorization, "Bearer test-token")
             }
             
             response.status shouldBe HttpStatusCode.OK
-            response.bodyAsText() shouldContain feedbackId
+            response.bodyAsText() shouldContain id
         }
     }
 
@@ -158,10 +158,10 @@ class FeedbackRoutesTest : FunSpec({
         testApplication {
             application { testModule() }
             
-            val feedbackId = UUID.randomUUID().toString()
-            insertTestFeedback(id = feedbackId)
+            val id = UUID.randomUUID().toString()
+            insertTestFeedback(id = id)
             
-            val response = createTestClient().post("/api/v1/intern/feedback/$feedbackId/tags") {
+            val response = createTestClient().post("/api/v1/intern/feedback/$id/tags") {
                 header(HttpHeaders.Authorization, "Bearer test-token")
                 contentType(ContentType.Application.Json)
                 setBody("""{"tag": "test-tag"}""")
@@ -185,11 +185,11 @@ class FeedbackRoutesTest : FunSpec({
         }
     }
 
-    test("GET /api/v1/intern/feedback/context-tags returns tag values with counts") {
+    test("GET /api/v1/intern/surveys/{surveyId}/context-tags returns tag values with counts") {
         testApplication {
             application { testModule() }
 
-            val feedbackId = "survey-ctx-1"
+            val surveyId = "survey-ctx-1"
 
             // 2x Ja, 1x Nei
             insertTestFeedbackWithJson(
@@ -197,10 +197,10 @@ class FeedbackRoutesTest : FunSpec({
                 app = "app-test",
                 feedbackJson = """
                     {
-                      "feedbackId": "$feedbackId",
+                                                                                        "surveyId": "$surveyId",
                       "context": {"tags": {"harAktivSykmelding": "Ja"}},
                       "answers": [
-                        {"fieldId": "svar", "fieldType": "RATING", "question": {"label": "Hvordan?"}, "value": {"type": "rating", "rating": 4}}
+                                                {"fieldId": "rating", "fieldType": "RATING", "question": {"label": "Hvordan?"}, "value": {"type": "rating", "rating": 4}}
                       ]
                     }
                 """.trimIndent(),
@@ -210,10 +210,10 @@ class FeedbackRoutesTest : FunSpec({
                 app = "app-test",
                 feedbackJson = """
                     {
-                      "feedbackId": "$feedbackId",
+                                                                                        "surveyId": "$surveyId",
                       "context": {"tags": {"harAktivSykmelding": "Ja"}},
                       "answers": [
-                        {"fieldId": "svar", "fieldType": "RATING", "question": {"label": "Hvordan?"}, "value": {"type": "rating", "rating": 5}}
+                                                {"fieldId": "rating", "fieldType": "RATING", "question": {"label": "Hvordan?"}, "value": {"type": "rating", "rating": 5}}
                       ]
                     }
                 """.trimIndent(),
@@ -223,17 +223,17 @@ class FeedbackRoutesTest : FunSpec({
                 app = "app-test",
                 feedbackJson = """
                     {
-                      "feedbackId": "$feedbackId",
+                                            "surveyId": "$surveyId",
                       "context": {"tags": {"harAktivSykmelding": "Nei"}},
                       "answers": [
-                        {"fieldId": "svar", "fieldType": "RATING", "question": {"label": "Hvordan?"}, "value": {"type": "rating", "rating": 3}}
+                                                {"fieldId": "rating", "fieldType": "RATING", "question": {"label": "Hvordan?"}, "value": {"type": "rating", "rating": 3}}
                       ]
                     }
                 """.trimIndent(),
             )
 
             val response = createTestClient().get(
-                "/api/v1/intern/feedback/context-tags?team=team-test&feedbackId=$feedbackId&maxCardinality=10"
+                "/api/v1/intern/surveys/$surveyId/context-tags?maxCardinality=10&team=team-test"
             ) {
                 header(HttpHeaders.Authorization, "Bearer test-token")
             }
@@ -243,7 +243,7 @@ class FeedbackRoutesTest : FunSpec({
             val json = Json { ignoreUnknownKeys = true }
             val body = json.parseToJsonElement(response.bodyAsText()).jsonObject
 
-            body["feedbackId"]?.jsonPrimitive?.content shouldBe feedbackId
+            body["surveyId"]?.jsonPrimitive?.content shouldBe surveyId
             val contextTags = body["contextTags"].shouldNotBeNull().jsonObject
             contextTags shouldContainKey "harAktivSykmelding"
 
@@ -261,7 +261,7 @@ class FeedbackRoutesTest : FunSpec({
             application { testModule() }
 
             val rowId = UUID.randomUUID().toString()
-            val feedbackId = "survey-viewport-1"
+            val surveyId = "survey-viewport-1"
 
             insertTestFeedbackWithJson(
                 id = rowId,
@@ -269,10 +269,10 @@ class FeedbackRoutesTest : FunSpec({
                 app = "app-test",
                 feedbackJson = """
                     {
-                      "feedbackId": "$feedbackId",
+                                            "surveyId": "$surveyId",
                       "context": {"viewport": {"width": 777, "height": 555}},
                       "answers": [
-                        {"fieldId": "svar", "fieldType": "RATING", "question": {"label": "Hvordan?"}, "value": {"type": "rating", "rating": 4}}
+                                                {"fieldId": "rating", "fieldType": "RATING", "question": {"label": "Hvordan?"}, "value": {"type": "rating", "rating": 4}}
                       ]
                     }
                 """.trimIndent(),

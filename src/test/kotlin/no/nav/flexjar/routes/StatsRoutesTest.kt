@@ -37,8 +37,8 @@ class StatsRoutesTest : FunSpec({
             application { testModule() }
             
             // Insert test data
-            insertTestFeedback(team = "flex", app = "spinnsyn", svar = 4)
-            insertTestFeedback(team = "flex", app = "spinnsyn", svar = 5)
+            insertTestFeedback(team = "flex", app = "spinnsyn", rating = 4)
+            insertTestFeedback(team = "flex", app = "spinnsyn", rating = 5)
             
             val response = createTestClient().get("/api/v1/intern/stats?team=flex") {
                 header(HttpHeaders.Authorization, "Bearer test-token")
@@ -54,9 +54,9 @@ class StatsRoutesTest : FunSpec({
         testApplication {
             application { testModule() }
             
-            insertTestFeedback(team = "flex", svar = 3)
-            insertTestFeedback(team = "flex", svar = 4)
-            insertTestFeedback(team = "flex", svar = 5)
+            insertTestFeedback(team = "flex", rating = 3)
+            insertTestFeedback(team = "flex", rating = 4)
+            insertTestFeedback(team = "flex", rating = 5)
             
             val response = createTestClient().get("/api/v1/intern/stats/ratings?team=flex") {
                 header(HttpHeaders.Authorization, "Bearer test-token")

@@ -128,9 +128,9 @@ fun Route.discoveryRoutes(
         val query = StatsQuery(
             team = team,
             app = params.parent.app?.takeIf { it != FILTER_ALL },
-            from = params.parent.from,
-            to = params.parent.to,
-            feedbackId = params.parent.feedbackId,
+            fromDate = params.parent.fromDate,
+            toDate = params.parent.toDate,
+            surveyId = params.parent.surveyId,
             deviceType = params.parent.deviceType?.takeIf { it != FILTER_ALL }
         )
 

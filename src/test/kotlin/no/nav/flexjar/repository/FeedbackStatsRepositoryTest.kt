@@ -21,9 +21,9 @@ class FeedbackStatsRepositoryTest : FunSpec({
 
     context("getStats") {
         test("returns correct statistics") {
-            insertTestFeedback(team = "flex", svar = 4)
-            insertTestFeedback(team = "flex", svar = 5)
-            insertTestFeedback(team = "flex", svar = 5)
+            insertTestFeedback(team = "flex", rating = 4)
+            insertTestFeedback(team = "flex", rating = 5)
+            insertTestFeedback(team = "flex", rating = 5)
             
             val stats = repository.getStats(StatsQuery(team = "flex"))
             
