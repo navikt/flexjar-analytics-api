@@ -87,9 +87,9 @@ class FeedbackRoutesTest : FunSpec({
             application { testModule() }
             
             // Insert feedback with tags
-            insertTestFeedback(tags = "bug,feature")
+            insertTestFeedback(team = "team-test", tags = "bug,feature")
             
-            val response = createTestClient().get("/api/v1/intern/feedback/tags") {
+            val response = createTestClient().get("/api/v1/intern/feedback/tags?team=team-test") {
                 header(HttpHeaders.Authorization, "Bearer test-token")
             }
             
@@ -105,12 +105,14 @@ class FeedbackRoutesTest : FunSpec({
             
             insertTestFeedback(team = "flex", app = "spinnsyn")
             
-            val response = createTestClient().get("/api/v1/intern/feedback/teams") {
+            val response = createTestClient().get("/api/v1/intern/feedback/teams?team=flex") {
                 header(HttpHeaders.Authorization, "Bearer test-token")
             }
             
             response.status shouldBe HttpStatusCode.OK
             response.bodyAsText() shouldContain "teams"
+            response.bodyAsText() shouldContain "flex"
+            response.bodyAsText() shouldContain "spinnsyn"
         }
     }
 

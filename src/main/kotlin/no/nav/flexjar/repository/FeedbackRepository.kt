@@ -31,7 +31,7 @@ class FeedbackRepository {
     private val log = LoggerFactory.getLogger(FeedbackRepository::class.java)
     private val json = Json { ignoreUnknownKeys = true }
 
-    fun findById(id: String): FeedbackDto? {
+    internal fun findById(id: String): FeedbackDto? {
         return transaction {
             FeedbackTable.selectAll().where { FeedbackTable.id eq id }
                 .singleOrNull()
@@ -51,7 +51,7 @@ class FeedbackRepository {
      * Get raw database record for ownership verification.
      * Returns team and app for the given feedback ID.
      */
-    fun findRawById(id: String): FeedbackDbRecord? {
+    internal fun findRawById(id: String): FeedbackDbRecord? {
         return transaction {
             FeedbackTable.selectAll().where { FeedbackTable.id eq id }
                 .singleOrNull()
@@ -100,7 +100,7 @@ class FeedbackRepository {
         return id
     }
 
-    fun update(id: String, feedbackJson: String): Boolean {
+    internal fun update(id: String, feedbackJson: String): Boolean {
         return transaction {
             FeedbackTable.update({ FeedbackTable.id eq id }) {
                 it[FeedbackTable.feedbackJson] = feedbackJson
@@ -108,7 +108,7 @@ class FeedbackRepository {
         }
     }
 
-    fun updateJson(id: String, feedbackJson: String): Boolean {
+    internal fun updateJson(id: String, feedbackJson: String): Boolean {
         return transaction {
             FeedbackTable.update({ FeedbackTable.id eq id }) {
                 it[FeedbackTable.feedbackJson] = feedbackJson
@@ -124,7 +124,7 @@ class FeedbackRepository {
         }
     }
 
-    fun addTag(id: String, tag: String): Boolean {
+    internal fun addTag(id: String, tag: String): Boolean {
         return transaction {
             val record = FeedbackTable.select(FeedbackTable.tags)
                 .where { FeedbackTable.id eq id }
@@ -168,7 +168,7 @@ class FeedbackRepository {
         }
     }
     
-    fun removeTag(id: String, tag: String): Boolean {
+    internal fun removeTag(id: String, tag: String): Boolean {
         return transaction {
             val record = FeedbackTable.select(FeedbackTable.tags)
                 .where { FeedbackTable.id eq id }
@@ -242,7 +242,8 @@ class FeedbackRepository {
         }
     }
 
-    fun findAllTags(): Set<String> {
+    @Deprecated("Use version with team parameter", ReplaceWith("findAllTags(team)"))
+    internal fun findAllTags(): Set<String> {
         return transaction {
              FeedbackTable.select(FeedbackTable.tags)
                 .where { FeedbackTable.tags.isNotNull() and (FeedbackTable.tags neq "") }
@@ -276,10 +277,6 @@ class FeedbackRepository {
         }
     }
 
-    /**
-     * Find all distinct apps for a specific team.
-     * Used by filter bootstrap endpoint.
-     */
     fun findDistinctApps(team: String): List<String> {
         return transaction {
             FeedbackTable.select(FeedbackTable.app)
@@ -290,8 +287,8 @@ class FeedbackRepository {
     }
 
     /**
-        * Find all surveys (surveyIds) grouped by app for a specific team.
-     * Used by filter bootstrap endpoint.
+     * Find all surveys (surveyIds) grouped by app for a specific team.
+     * Used by filter bootstrap endpoint and survey list.
      */
     fun findSurveysByApp(team: String): Map<String, List<String>> {
         return transaction {
@@ -307,7 +304,7 @@ class FeedbackRepository {
             """.trimIndent()
             
             val result = mutableMapOf<String, MutableList<String>>()
-            exec(sql, listOf(VarCharColumnType() to team)) { rs ->
+            exec(sql, listOf(org.jetbrains.exposed.sql.VarCharColumnType() to team)) { rs ->
                 while (rs.next()) {
                     val app = rs.getString("app") ?: continue
                     val surveyId = rs.getString("survey_id") ?: continue
@@ -317,33 +314,18 @@ class FeedbackRepository {
             result
         }
     }
-
-    fun findAllTeamsAndApps(): Map<String, Set<String>> {
-        return transaction {
-             val result = mutableMapOf<String, MutableSet<String>>()
-             FeedbackTable.select(FeedbackTable.team, FeedbackTable.app)
-                .withDistinct()
-                .forEach { 
-                    val team = it[FeedbackTable.team]
-                    val app = it[FeedbackTable.app]
-                    result.getOrPut(team) { mutableSetOf() }
-                    result[team]!!.add(app)
-                }
-             result
-        }
-    }
     
-    fun findMetadataKeysForSurvey(surveyId: String, team: String = "flex"): Map<String, Set<String>> {
+    fun findMetadataKeysForSurvey(surveyId: String, team: String): Map<String, Set<String>> {
         return transaction {
             val sql = """
                 SELECT DISTINCT 
                     key as metadata_key,
-                    feedback_json::json->'metadata'->>key as metadata_value
+                    feedback_json::json->'context'->'tags'->>key as metadata_value
                 FROM feedback,
-                     jsonb_object_keys(feedback_json::jsonb->'metadata') as key
+                     jsonb_object_keys(feedback_json::jsonb->'context'->'tags') as key
                 WHERE team = ?
                   AND feedback_json::json->>'surveyId' = ?
-                  AND feedback_json::json->'metadata' IS NOT NULL
+                  AND feedback_json::json->'context'->'tags' IS NOT NULL
             """.trimIndent()
             
             val result = mutableMapOf<String, MutableSet<String>>()
@@ -360,7 +342,7 @@ class FeedbackRepository {
 
     fun findContextTagsForSurvey(
         surveyId: String,
-        team: String = "flex",
+        team: String,
         task: String? = null,
         segments: List<Pair<String, String>> = emptyList(),
     ): Map<String, List<MetadataValueWithCount>> {

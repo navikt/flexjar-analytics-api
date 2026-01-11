@@ -18,9 +18,9 @@ class FeedbackService(
 
     fun findById(id: String, team: String) = repository.findById(id, team)
 
-    fun findAllTags() = repository.findAllTags()
+    fun findAllTags(team: String) = repository.findAllTags(team)
 
-    fun findAllTeamsAndApps() = repository.findAllTeamsAndApps()
+    fun findDistinctApps(team: String) = repository.findDistinctApps(team)
 
     fun save(feedbackJson: String, team: String, app: String): String {
         val sanitizedJson = redactFeedbackJson(feedbackJson)

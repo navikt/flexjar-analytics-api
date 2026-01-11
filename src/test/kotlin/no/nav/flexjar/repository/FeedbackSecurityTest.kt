@@ -99,7 +99,7 @@ class FeedbackSecurityTest : DescribeSpec({
             """.trimIndent()
             
             val saved = service.save(feedbackJson, "team-test", "test-app")
-            val retrieved = repository.findRawById(saved)
+            val retrieved = repository.findRawById(saved, "team-test")
             
             retrieved?.feedbackJson shouldNotContain "12345678901"
         }
@@ -121,7 +121,7 @@ class FeedbackSecurityTest : DescribeSpec({
             """.trimIndent()
             
             val saved = service.save(feedbackJson, "team-test", "test-app")
-            val retrieved = repository.findRawById(saved)
+            val retrieved = repository.findRawById(saved, "team-test")
             
             retrieved?.feedbackJson shouldNotContain "test.user@example.com"
             retrieved?.feedbackJson shouldContain "[E-POST FJERNET]"
@@ -144,7 +144,7 @@ class FeedbackSecurityTest : DescribeSpec({
             """.trimIndent()
             
             val saved = service.save(feedbackJson, "team-test", "test-app")
-            val retrieved = repository.findRawById(saved)
+            val retrieved = repository.findRawById(saved, "team-test")
             
             retrieved?.feedbackJson shouldNotContain "98765432"
             retrieved?.feedbackJson shouldContain "[TELEFON FJERNET]"
@@ -167,7 +167,7 @@ class FeedbackSecurityTest : DescribeSpec({
             """.trimIndent()
             
             val saved = service.save(feedbackJson, "team-test", "test-app")
-            val retrieved = repository.findRawById(saved)
+            val retrieved = repository.findRawById(saved, "team-test")
             
             retrieved?.feedbackJson shouldContain "\"rating\":5"
         }
@@ -176,9 +176,60 @@ class FeedbackSecurityTest : DescribeSpec({
             val feedbackJson = """{"surveyId": "simple"}"""
             
             val saved = repository.save(feedbackJson, "team-test", "test-app")
-            val retrieved = repository.findRawById(saved)
+            val retrieved = repository.findRawById(saved, "team-test")
             
             retrieved?.feedbackJson shouldContain "simple"
+        }
+    }
+
+    describe("Team Isolation - Patch Verification") {
+        val service = FeedbackService()
+        val repository = FeedbackRepository()
+
+        it("should isolate tags between teams") {
+            // Seed data for two teams
+            val idA = service.save("""{"surveyId":"A","answers":[{"fieldId":"f","value":{"type":"text","text":"..."}}]}""", "team-A", "app")
+            service.addTag(idA, "team-A", "tag-A")
+            
+            val idB = service.save("""{"surveyId":"B","answers":[{"fieldId":"f","value":{"type":"text","text":"..."}}]}""", "team-B", "app")
+            service.addTag(idB, "team-B", "tag-B")
+
+            // Verify team-A only sees its tags
+            repository.findAllTags("team-A") shouldBe setOf("tag-a")
+            repository.findAllTags("team-B") shouldBe setOf("tag-b")
+        }
+
+        it("should isolate distinct apps between teams") {
+            service.save("""{"surveyId":"A"}""", "team-A", "app-A")
+            service.save("""{"surveyId":"B"}""", "team-B", "app-B")
+
+            repository.findDistinctApps("team-A") shouldBe listOf("app-A")
+            repository.findDistinctApps("team-B") shouldBe listOf("app-B")
+        }
+
+        it("should isolate metadata keys between teams") {
+            val feedbackA = """{"surveyId":"S","context":{"tags":{"key-A":"val-A"}},"answers":[{"fieldId":"f","value":{"type":"text","text":"..."}}]}"""
+            val feedbackB = """{"surveyId":"S","context":{"tags":{"key-B":"val-B"}},"answers":[{"fieldId":"f","value":{"type":"text","text":"..."}}]}"""
+            
+            service.save(feedbackA, "team-A", "app")
+            service.save(feedbackB, "team-B", "app")
+
+            val keysA = repository.findMetadataKeysForSurvey("S", "team-A")
+            keysA.keys shouldBe setOf("key-A")
+            keysA["key-A"] shouldBe setOf("val-A")
+
+            val keysB = repository.findMetadataKeysForSurvey("S", "team-B")
+            keysB.keys shouldBe setOf("key-B")
+        }
+
+        it("should deny access to feedback from another team") {
+            val idA = service.save("""{"surveyId":"S","answers":[{"fieldId":"f","value":{"type":"text","text":"..."}}]}""", "team-A", "app")
+            
+            // Should be found by authorized team
+            service.findById(idA, "team-A")?.id shouldBe idA
+            
+            // Should be null (isolated) for another team
+            service.findById(idA, "team-B") shouldBe null
         }
     }
 })

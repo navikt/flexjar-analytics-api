@@ -115,11 +115,11 @@ class FeedbackRepositoryTest : FunSpec({
         }
 
         test("returns unique tags from all feedback") {
-            insertTestFeedback(id = "1", tags = "bug,feature")
-            insertTestFeedback(id = "2", tags = "bug,improvement")
-            insertTestFeedback(id = "3", tags = "feature")
+            insertTestFeedback(id = "1", team = "flex", tags = "bug,feature")
+            insertTestFeedback(id = "2", team = "flex", tags = "bug,improvement")
+            insertTestFeedback(id = "3", team = "flex", tags = "feature")
             
-            val tags = repository.findAllTags()
+            val tags = repository.findAllTags("flex")
             
             tags shouldHaveSize 3
             tags shouldContain "bug"
@@ -128,18 +128,20 @@ class FeedbackRepositoryTest : FunSpec({
         }
     }
 
-    context("findAllTeamsAndApps") {
-        test("returns teams with their apps") {
+    context("findDistinctApps") {
+        test("returns apps for specific team") {
             insertTestFeedback(team = "flex", app = "spinnsyn")
             insertTestFeedback(team = "flex", app = "sykepengesoknad")
             insertTestFeedback(team = "arbeid", app = "pam-frontend")
             
-            val teamsAndApps = repository.findAllTeamsAndApps()
+            val flexApps = repository.findDistinctApps("flex")
+            flexApps shouldHaveSize 2
+            flexApps shouldContain "spinnsyn"
+            flexApps shouldContain "sykepengesoknad"
             
-            teamsAndApps.keys shouldHaveSize 2
-            teamsAndApps["flex"]?.shouldContain("spinnsyn")
-            teamsAndApps["flex"]?.shouldContain("sykepengesoknad")
-            teamsAndApps["arbeid"]?.shouldContain("pam-frontend")
+            val arbeidApps = repository.findDistinctApps("arbeid")
+            arbeidApps shouldHaveSize 1
+            arbeidApps shouldContain "pam-frontend"
         }
     }
 

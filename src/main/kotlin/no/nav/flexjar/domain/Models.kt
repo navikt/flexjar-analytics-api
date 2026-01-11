@@ -303,7 +303,7 @@ data class TeamsAndApps(
  * Backend converts to UTC Instant for database queries.
  */
 data class FeedbackQuery(
-    val team: String = "flex",
+    val team: String,
     val app: String? = null,
     val page: Int? = null,
     val size: Int = 10,
@@ -333,7 +333,7 @@ data class FeedbackQuery(
  * Note: fromDate/toDate are in YYYY-MM-DD format and interpreted as Europe/Oslo timezone.
  */
 data class StatsQuery(
-    val team: String = "flex",
+    val team: String,
     val app: String? = null,
     /** Start date (YYYY-MM-DD, Europe/Oslo inclusive) */
     val fromDate: String? = null,

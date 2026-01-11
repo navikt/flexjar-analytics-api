@@ -123,16 +123,18 @@ fun Route.feedbackRoutes(service: FeedbackService = defaultFeedbackService) {
         }
     }
     
-    // Get all tags
+    // Get all tags for the current team
     get<ApiV1Intern.Feedback.AllTags> {
-        val tags = service.findAllTags()
+        val team = call.authorizedTeam
+        val tags = service.findAllTags(team)
         call.respond(tags)
     }
     
-    // Get all teams and their apps
+    // Get all apps for the current team
     get<ApiV1Intern.Feedback.Teams> {
-        val teamsAndApps = service.findAllTeamsAndApps()
-        call.respond(TeamsAndApps(teams = teamsAndApps))
+        val team = call.authorizedTeam
+        val apps = service.findDistinctApps(team)
+        call.respond(TeamsAndApps(mapOf(team to apps.toSet())))
     }
     
     // Get all metadata keys and values (filtered by cardinality for graph-friendly data)
@@ -155,10 +157,11 @@ fun Route.feedbackRoutes(service: FeedbackService = defaultFeedbackService) {
         ))
     }
 
-    // Get all surveys (grouped by app)
+    // Get all surveys (grouped by app) for the current team
     get<ApiV1Intern.Surveys> {
-        val teamsAndApps = service.findAllTeamsAndApps()
-        call.respond(teamsAndApps)
+        val team = call.authorizedTeam
+        val surveysByApp = FeedbackRepository().findSurveysByApp(team)
+        call.respond(surveysByApp)
     }
 }
 
