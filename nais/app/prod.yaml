@@ -46,6 +46,7 @@ spec:
     inbound:
       rules:
         - application: flexjar-analytics
+        - application: bro-frontend
   gcp:
     sqlInstances:
       - type: POSTGRES_17
