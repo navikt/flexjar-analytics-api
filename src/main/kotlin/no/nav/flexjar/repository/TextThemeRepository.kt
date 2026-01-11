@@ -25,6 +25,18 @@ class TextThemeRepository {
         }
     }
 
+    fun findByTeam(team: String, context: AnalysisContext): List<TextThemeDto> {
+        return transaction {
+            TextThemeTable.selectAll()
+                .where {
+                    (TextThemeTable.team eq team) and
+                        (TextThemeTable.analysisContext eq context.name)
+                }
+                .orderBy(TextThemeTable.priority to SortOrder.DESC)
+                .map { it.toDto() }
+        }
+    }
+
     /**
      * Find a single theme by ID
      */
@@ -44,6 +56,7 @@ class TextThemeRepository {
         return transaction {
             val id = UUID.randomUUID()
             val now = OffsetDateTime.now()
+            val context = request.analysisContext
             
             TextThemeTable.insert {
                 it[TextThemeTable.id] = id
@@ -52,6 +65,7 @@ class TextThemeRepository {
                 it[TextThemeTable.keywords] = request.keywords
                 it[TextThemeTable.color] = request.color
                 it[TextThemeTable.priority] = request.priority ?: 0
+                it[TextThemeTable.analysisContext] = context.name
                 it[TextThemeTable.createdAt] = now
             }
             
@@ -61,7 +75,8 @@ class TextThemeRepository {
                 name = request.name,
                 keywords = request.keywords,
                 color = request.color,
-                priority = request.priority ?: 0
+                priority = request.priority ?: 0,
+                analysisContext = context
             )
         }
     }
@@ -76,6 +91,7 @@ class TextThemeRepository {
                 request.keywords?.let { stmt[keywords] = it }
                 request.color?.let { stmt[color] = it }
                 request.priority?.let { stmt[priority] = it }
+                stmt[analysisContext] = request.analysisContext.name
             } > 0
         }
     }
@@ -107,7 +123,12 @@ class TextThemeRepository {
             name = this[TextThemeTable.name],
             keywords = this[TextThemeTable.keywords].toList(),
             color = this[TextThemeTable.color],
-            priority = this[TextThemeTable.priority]
+            priority = this[TextThemeTable.priority],
+            analysisContext = try {
+                AnalysisContext.valueOf(this[TextThemeTable.analysisContext])
+            } catch (_: Exception) {
+                AnalysisContext.GENERAL_FEEDBACK
+            }
         )
     }
 }

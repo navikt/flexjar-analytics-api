@@ -2,6 +2,12 @@ package no.nav.flexjar.domain
 
 import kotlinx.serialization.Serializable
 
+@Serializable
+enum class AnalysisContext {
+    GENERAL_FEEDBACK,
+    BLOCKER
+}
+
 /**
  * Text theme definition - used to group free-text responses by keyword matching.
  * Themes are team-scoped and can be reused across ALL survey types.
@@ -13,7 +19,8 @@ data class TextThemeDto(
     val name: String,
     val keywords: List<String>,
     val color: String? = null,
-    val priority: Int = 0
+    val priority: Int = 0,
+    val analysisContext: AnalysisContext
 )
 
 /**
@@ -24,7 +31,8 @@ data class CreateThemeRequest(
     val name: String,
     val keywords: List<String>,
     val color: String? = null,
-    val priority: Int? = null
+    val priority: Int? = null,
+    val analysisContext: AnalysisContext
 )
 
 /**
@@ -35,7 +43,8 @@ data class UpdateThemeRequest(
     val name: String? = null,
     val keywords: List<String>? = null,
     val color: String? = null,
-    val priority: Int? = null
+    val priority: Int? = null,
+    val analysisContext: AnalysisContext
 )
 
 // ============================================
@@ -83,4 +92,45 @@ data class DiscoveryStatsResponse(
     val wordFrequency: List<WordFrequencyEntry>,
     val themes: List<ThemeResult>,
     val recentResponses: List<DiscoveryRecentResponse>
+)
+
+// ============================================
+// Blocker Statistics Response Types
+// ============================================
+
+@Serializable
+data class BlockerSourceResponse(
+    val text: String,
+    val submittedAt: String
+)
+
+@Serializable
+data class BlockerWordFrequencyEntry(
+    val word: String,
+    val count: Int,
+    val sourceResponses: List<BlockerSourceResponse> = emptyList()
+)
+
+@Serializable
+data class BlockerThemeResult(
+    val theme: String,
+    val themeId: String,
+    val count: Int,
+    val examples: List<String>,
+    val color: String? = null
+)
+
+@Serializable
+data class RecentBlockerResponse(
+    val blocker: String,
+    val task: String,
+    val submittedAt: String
+)
+
+@Serializable
+data class BlockerStatsResponse(
+    val totalBlockers: Int,
+    val wordFrequency: List<BlockerWordFrequencyEntry>,
+    val themes: List<BlockerThemeResult>,
+    val recentBlockers: List<RecentBlockerResponse>
 )

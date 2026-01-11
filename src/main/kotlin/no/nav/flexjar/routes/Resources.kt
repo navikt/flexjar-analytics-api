@@ -70,7 +70,9 @@ class ApiV1Intern {
         /** Survey ID filter */
         val surveyId: String? = null,
         /** Device type filter */
-        val deviceType: String? = null
+        val deviceType: String? = null,
+        /** Task filter for Top Tasks drill-down */
+        val task: String? = null
     ) {
         @Resource("overview")
         @Serializable
@@ -92,6 +94,10 @@ class ApiV1Intern {
         @Serializable
         class SurveyTypes(val parent: Stats)
 
+        @Resource("blockers")
+        @Serializable
+        class Blockers(val parent: Stats)
+
         @Resource("discovery")
         @Serializable
         class Discovery(val parent: Stats)
@@ -99,7 +105,11 @@ class ApiV1Intern {
 
     @Resource("themes")
     @Serializable
-    class Themes(val parent: ApiV1Intern = ApiV1Intern()) {
+    class Themes(
+        val parent: ApiV1Intern = ApiV1Intern(),
+        /** Optional theme context filter (GENERAL_FEEDBACK | BLOCKER) */
+        val context: String? = null
+    ) {
         @Resource("{id}")
         @Serializable
         class Id(val parent: Themes, val id: String)
@@ -120,6 +130,8 @@ class ApiV1Intern {
                 val parent: Id,
                 /** Max unique values per key. Keys with more values are filtered out. Default 10. */
                 val maxCardinality: Int? = 10,
+                /** Task filter for Top Tasks drill-down (matches option label) */
+                val task: String? = null,
             )
         }
     }

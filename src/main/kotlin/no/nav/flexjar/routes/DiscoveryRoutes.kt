@@ -28,9 +28,22 @@ fun Route.discoveryRoutes(
     // ============================================
 
     // List all themes for team
-    get<ApiV1Intern.Themes> {
+    get<ApiV1Intern.Themes> { params ->
         val team = call.authorizedTeam
-        val themes = themeRepository.findByTeam(team)
+
+        val themes = when (val ctx = params.context?.trim()?.takeIf { it.isNotEmpty() }) {
+            null -> themeRepository.findByTeam(team)
+            else -> {
+                val parsed = try {
+                    AnalysisContext.valueOf(ctx)
+                } catch (_: Exception) {
+                    call.respond(HttpStatusCode.BadRequest, mapOf("error" to "Invalid context '$ctx'. Expected GENERAL_FEEDBACK or BLOCKER"))
+                    return@get
+                }
+                themeRepository.findByTeam(team, parsed)
+            }
+        }
+
         call.respond(themes)
     }
 
@@ -78,12 +91,6 @@ fun Route.discoveryRoutes(
         }
 
         val request = call.receive<UpdateThemeRequest>()
-        
-        // Validate at least one field to update
-        if (request.name == null && request.keywords == null && request.color == null && request.priority == null) {
-            call.respond(HttpStatusCode.BadRequest, mapOf("error" to "At least one field must be provided"))
-            return@put
-        }
 
         val updated = themeRepository.update(id, request)
         if (updated) {
