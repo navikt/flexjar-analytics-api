@@ -1,8 +1,0 @@
-no.nav.security.jwt:
-  issuers:
-    - issuer_name: azureator
-      discoveryurl: ${AZURE_APP_WELL_KNOWN_URL:http://localhost:8081/default/.well-known/openid-configuration}
-      accepted_audience: ${AZURE_APP_CLIENT_ID:local-client-id}
-    - issuer_name: tokenx
-      discoveryurl: ${TOKEN_X_WELL_KNOWN_URL:http://localhost:8081/tokenx/.well-known/openid-configuration}
-      accepted_audience: ${TOKEN_X_CLIENT_ID:local-tokenx-id}
