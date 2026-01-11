@@ -23,6 +23,10 @@ tags:
   - name: Internal
     description: Health check endpoints for NAIS
 
+# Default: all endpoints require Azure auth unless overridden per-operation.
+security:
+  - azure: []
+
 paths:
   # ==================== Analytics (Protected) ====================
   /api/v1/intern/feedback:
@@ -1060,6 +1064,7 @@ paths:
       tags: [Submission]
       summary: Submit feedback
       description: Canonical widget submission payload (schemaVersion=1). Returns created ID.
+      security: []
       requestBody:
         required: true
         content:
@@ -1082,6 +1087,7 @@ paths:
     get:
       tags: [Internal]
       summary: Liveness check
+      security: []
       responses:
         '200':
           description: Service is alive
@@ -1090,6 +1096,7 @@ paths:
     get:
       tags: [Internal]
       summary: Readiness check
+      security: []
       responses:
         '200':
           description: Service is ready
@@ -1112,22 +1119,18 @@ components:
           type: string
           format: date-time
         app:
-          type: string
-          nullable: true
+          type: [string, 'null']
         surveyId:
           type: string
         surveyVersion:
-          type: string
-          nullable: true
+          type: [string, 'null']
         surveyType:
-          type: string
-          nullable: true
+          type: [string, 'null']
           enum: [rating, topTasks, discovery, taskPriority, custom]
         context:
           $ref: '#/components/schemas/SubmissionContext'
         metadata:
-          type: object
-          nullable: true
+          type: [object, 'null']
           additionalProperties:
             type: string
         answers:
@@ -1141,13 +1144,11 @@ components:
         sensitiveDataRedacted:
           type: boolean
         durationMs:
-          type: integer
+          type: [integer, 'null']
           format: int64
-          nullable: true
         visitStartedAt:
-          type: string
+          type: [string, 'null']
           format: date-time
-          nullable: true
 
     SubmissionContext:
       type: object
@@ -1164,8 +1165,7 @@ components:
         viewportHeight:
           type: integer
         tags:
-          type: object
-          nullable: true
+          type: [object, 'null']
           additionalProperties:
             type: string
 
@@ -1194,12 +1194,10 @@ components:
                 rating:
                   type: integer
                 ratingVariant:
-                  type: string
-                  nullable: true
+                  type: [string, 'null']
                   enum: [emoji, thumbs, stars, nps]
                 ratingScale:
-                  type: integer
-                  nullable: true
+                  type: [integer, 'null']
             - type: object
               properties:
                 type:
@@ -1254,8 +1252,7 @@ components:
           additionalProperties:
             type: integer
         averageRating:
-          type: number
-          nullable: true
+          type: [number, 'null']
         byDevice:
           type: object
           additionalProperties:
@@ -1362,31 +1359,26 @@ components:
                             percentage:
                               type: integer
         surveyType:
-          type: string
-          nullable: true
+          type: [string, 'null']
           enum: [rating, topTasks, discovery, taskPriority, custom]
         period:
           type: object
           properties:
             fromDate:
-              type: string
+              type: [string, 'null']
               format: date
-              nullable: true
             toDate:
-              type: string
+              type: [string, 'null']
               format: date
-              nullable: true
             days:
               type: integer
         privacy:
-          type: object
-          nullable: true
+          type: [object, 'null']
           properties:
             masked:
               type: boolean
             reason:
-              type: string
-              nullable: true
+              type: [string, 'null']
             threshold:
               type: integer
 
@@ -1423,8 +1415,7 @@ components:
         surveyId:
           type: string
         maxCardinality:
-          type: integer
-          nullable: true
+          type: [integer, 'null']
         metadataKeys:
           type: object
           additionalProperties:
@@ -1439,8 +1430,7 @@ components:
         surveyId:
           type: string
         maxCardinality:
-          type: integer
-          nullable: true
+          type: [integer, 'null']
         contextTags:
           type: object
           additionalProperties:
@@ -1497,8 +1487,7 @@ components:
           items:
             type: string
         color:
-          type: string
-          nullable: true
+          type: [string, 'null']
         analysisContext:
           $ref: '#/components/schemas/TextAnalysisContext'
         priority:
@@ -1515,32 +1504,26 @@ components:
           items:
             type: string
         color:
-          type: string
-          nullable: true
+          type: [string, 'null']
         analysisContext:
           $ref: '#/components/schemas/TextAnalysisContext'
         priority:
-          type: integer
-          nullable: true
+          type: [integer, 'null']
 
     UpdateThemeRequest:
       type: object
       required: [analysisContext]
       properties:
         name:
-          type: string
-          nullable: true
+          type: [string, 'null']
         keywords:
-          type: array
-          nullable: true
+          type: [array, 'null']
           items:
             type: string
         color:
-          type: string
-          nullable: true
+          type: [string, 'null']
         priority:
-          type: integer
-          nullable: true
+          type: [integer, 'null']
         analysisContext:
           $ref: '#/components/schemas/TextAnalysisContext'
 
@@ -1548,13 +1531,11 @@ components:
       type: object
       properties:
         fromDate:
-          type: string
+          type: [string, 'null']
           format: date
-          nullable: true
         toDate:
-          type: string
+          type: [string, 'null']
           format: date
-          nullable: true
 
     StatsTotals:
       type: object
@@ -1592,8 +1573,7 @@ components:
           additionalProperties:
             type: integer
         average:
-          type: number
-          nullable: true
+          type: [number, 'null']
         total:
           type: integer
 
@@ -1663,8 +1643,7 @@ components:
           additionalProperties:
             $ref: '#/components/schemas/DailyStat'
         questionText:
-          type: string
-          nullable: true
+          type: [string, 'null']
 
     ThemeResult:
       type: object
@@ -1774,8 +1753,7 @@ components:
         success:
           type: string
         blocker:
-          type: string
-          nullable: true
+          type: [string, 'null']
         submittedAt:
           type: string
 
@@ -1816,8 +1794,7 @@ components:
           items:
             type: string
         color:
-          type: string
-          nullable: true
+          type: [string, 'null']
 
     RecentBlockerResponse:
       type: object
@@ -1857,25 +1834,20 @@ components:
           type: string
           format: date-time
         startedAt:
-          type: string
+          type: [string, 'null']
           format: date-time
-          nullable: true
         timeToCompleteMs:
-          type: integer
-          nullable: true
+          type: [integer, 'null']
         context:
           type: object
           properties:
             url:
-              type: string
-              nullable: true
+              type: [string, 'null']
             pathname:
-              type: string
-              nullable: true
+              type: [string, 'null']
             deviceType:
-              type: string
+              type: [string, 'null']
               enum: [mobile, tablet, desktop]
-              nullable: true
             viewport:
               type: object
               properties:
@@ -1902,11 +1874,9 @@ components:
                   label:
                     type: string
                   description:
-                    type: string
-                    nullable: true
+                    type: [string, 'null']
                   options:
-                    type: array
-                    nullable: true
+                    type: [array, 'null']
                     items:
                       type: object
                       properties:
@@ -1922,8 +1892,7 @@ components:
                     type: string
                     enum: [rating, text, singleChoice, multiChoice, date]
         metadata:
-          type: object
-          nullable: true
+          type: [object, 'null']
           additionalProperties:
             type: string
       required: [schemaVersion, surveyId, surveyType, submittedAt, answers]
