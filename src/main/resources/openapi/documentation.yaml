@@ -1400,7 +1400,7 @@ components:
             items:
               type: string
 
-    ValueCount:
+    MetadataValueWithCount:
       type: object
       required: [value, count]
       properties:
@@ -1430,7 +1430,7 @@ components:
           additionalProperties:
             type: array
             items:
-              $ref: '#/components/schemas/ValueCount'
+              type: string
 
     ContextTagsResponse:
       type: object
@@ -1446,19 +1446,24 @@ components:
           additionalProperties:
             type: array
             items:
-              $ref: '#/components/schemas/ValueCount'
+              $ref: '#/components/schemas/MetadataValueWithCount'
 
     FilterBootstrapResponse:
       type: object
-      required: [apps, surveys, allTags, availableTeams]
+      required: [generatedAt, selectedTeam, availableTeams, deviceTypes, apps, surveysByApp, tags]
       properties:
+        generatedAt:
+          type: string
+          format: date-time
+        selectedTeam:
+          type: string
         apps:
           type: array
           items:
             type: string
-        surveys:
+        surveysByApp:
           $ref: '#/components/schemas/SurveysByApp'
-        allTags:
+        tags:
           type: array
           items:
             type: string
@@ -1466,6 +1471,11 @@ components:
           type: array
           items:
             type: string
+        deviceTypes:
+          type: array
+          items:
+            type: string
+            enum: [mobile, tablet, desktop]
 
     TextAnalysisContext:
       type: string
@@ -1473,11 +1483,13 @@ components:
 
     TextThemeDto:
       type: object
-      required: [id, name, keywords, context, priority]
+      required: [id, team, name, keywords, analysisContext, priority]
       properties:
         id:
           type: string
           format: uuid
+        team:
+          type: string
         name:
           type: string
         keywords:
@@ -1487,14 +1499,14 @@ components:
         color:
           type: string
           nullable: true
-        context:
+        analysisContext:
           $ref: '#/components/schemas/TextAnalysisContext'
         priority:
           type: integer
 
     CreateThemeRequest:
       type: object
-      required: [name, keywords, context]
+      required: [name, keywords, analysisContext]
       properties:
         name:
           type: string
@@ -1505,7 +1517,7 @@ components:
         color:
           type: string
           nullable: true
-        context:
+        analysisContext:
           $ref: '#/components/schemas/TextAnalysisContext'
         priority:
           type: integer
@@ -1513,6 +1525,7 @@ components:
 
     UpdateThemeRequest:
       type: object
+      required: [analysisContext]
       properties:
         name:
           type: string
@@ -1528,35 +1541,47 @@ components:
         priority:
           type: integer
           nullable: true
+        analysisContext:
+          $ref: '#/components/schemas/TextAnalysisContext'
 
     DateRange:
       type: object
-      required: [fromDate, toDate]
       properties:
         fromDate:
           type: string
           format: date
+          nullable: true
         toDate:
           type: string
           format: date
+          nullable: true
 
     StatsTotals:
       type: object
-      required: [totalResponses, withText]
+      required: [feedbackCount, textCount, lowRatingCount]
       properties:
-        totalResponses:
+        feedbackCount:
           type: integer
-        withText:
+        textCount:
+          type: integer
+        lowRatingCount:
           type: integer
 
     StatsOverviewResponse:
       type: object
-      required: [period, totals]
+      required: [generatedAt, totals, ratingDistribution]
       properties:
-        period:
+        generatedAt:
+          type: string
+          format: date-time
+        range:
           $ref: '#/components/schemas/DateRange'
         totals:
           $ref: '#/components/schemas/StatsTotals'
+        ratingDistribution:
+          type: object
+          additionalProperties:
+            type: integer
 
     RatingDistribution:
       type: object
@@ -1568,16 +1593,16 @@ components:
             type: integer
         average:
           type: number
+          nullable: true
         total:
           type: integer
 
-    TimelinePoint:
+    TimelineEntry:
       type: object
       required: [date, count]
       properties:
         date:
           type: string
-          format: date
         count:
           type: integer
 
@@ -1588,55 +1613,75 @@ components:
         data:
           type: array
           items:
-            $ref: '#/components/schemas/TimelinePoint'
+            $ref: '#/components/schemas/TimelineEntry'
 
     DailyStat:
       type: object
-      required: [date, count]
+      required: [total, success]
       properties:
-        date:
-          type: string
-          format: date
-        count:
+        total:
+          type: integer
+        success:
           type: integer
 
     TopTaskStats:
       type: object
-      required: [task, totalCount, dailyStats]
+      required: [task, totalCount, successCount, partialCount, failureCount, successRate, formattedSuccessRate]
       properties:
         task:
           type: string
         totalCount:
           type: integer
-        dailyStats:
-          type: array
-          items:
-            $ref: '#/components/schemas/DailyStat'
+        successCount:
+          type: integer
+        partialCount:
+          type: integer
+        failureCount:
+          type: integer
+        successRate:
+          type: number
+        formattedSuccessRate:
+          type: string
+        blockerCounts:
+          type: object
+          additionalProperties:
+            type: integer
 
     TopTasksResponse:
       type: object
-      required: [tasks, totalResponses]
+      required: [totalSubmissions, tasks]
       properties:
+        totalSubmissions:
+          type: integer
         tasks:
           type: array
           items:
             $ref: '#/components/schemas/TopTaskStats'
-        totalResponses:
-          type: integer
 
-    ThemeCount:
-      type: object
-      required: [themeId, themeName, count]
-      properties:
-        themeId:
+        dailyStats:
+          type: object
+          additionalProperties:
+            $ref: '#/components/schemas/DailyStat'
+        questionText:
           type: string
-          format: uuid
-        themeName:
+          nullable: true
+
+    ThemeResult:
+      type: object
+      required: [theme, count, successRate, examples]
+      properties:
+        theme:
           type: string
         count:
           type: integer
+        successRate:
+          type: number
+        examples:
+          type: array
+          items:
+            type: string
 
-    WordFrequency:
+    WordFrequencyEntry:
       type: object
       required: [word, count]
       properties:
@@ -1647,42 +1692,56 @@ components:
 
     BlockerStatsResponse:
       type: object
-      required: [themes, wordFrequency, totalResponses]
+      required: [totalBlockers, wordFrequency, themes, recentBlockers]
       properties:
-        themes:
-          type: array
-          items:
-            $ref: '#/components/schemas/ThemeCount'
+        totalBlockers:
+          type: integer
         wordFrequency:
           type: array
           items:
-            $ref: '#/components/schemas/WordFrequency'
-        totalResponses:
-          type: integer
-
-    DiscoveryStatsResponse:
-      type: object
-      required: [themes, totalResponses]
-      properties:
+            $ref: '#/components/schemas/BlockerWordFrequencyEntry'
         themes:
           type: array
           items:
-            $ref: '#/components/schemas/ThemeCount'
-        totalResponses:
+            $ref: '#/components/schemas/BlockerThemeResult'
+        recentBlockers:
+          type: array
+          items:
+            $ref: '#/components/schemas/RecentBlockerResponse'
+
+    DiscoveryStatsResponse:
+      type: object
+      required: [totalSubmissions, wordFrequency, themes, recentResponses]
+      properties:
+        totalSubmissions:
           type: integer
+        wordFrequency:
+          type: array
+          items:
+            $ref: '#/components/schemas/WordFrequencyEntry'
+        themes:
+          type: array
+          items:
+            $ref: '#/components/schemas/ThemeResult'
+        recentResponses:
+          type: array
+          items:
+            $ref: '#/components/schemas/DiscoveryRecentResponse'
 
     TaskVote:
       type: object
-      required: [task, count]
+      required: [task, votes, percentage]
       properties:
         task:
           type: string
-        count:
+        votes:
+          type: integer
+        percentage:
           type: integer
 
     TaskPriorityResponse:
       type: object
-      required: [totalSubmissions, tasks]
+      required: [totalSubmissions, tasks, longNeckCutoff, cumulativePercentageAt5]
       properties:
         totalSubmissions:
           type: integer
@@ -1692,10 +1751,8 @@ components:
             $ref: '#/components/schemas/TaskVote'
         longNeckCutoff:
           type: integer
-          nullable: true
         cumulativePercentageAt5:
-          type: number
-          nullable: true
+          type: integer
 
     SurveyTypeCount:
       type: object
@@ -1706,7 +1763,72 @@ components:
         count:
           type: integer
         percentage:
-          type: number
+          type: integer
+
+    DiscoveryRecentResponse:
+      type: object
+      required: [task, success, submittedAt]
+      properties:
+        task:
+          type: string
+        success:
+          type: string
+        blocker:
+          type: string
+          nullable: true
+        submittedAt:
+          type: string
+
+    BlockerSourceResponse:
+      type: object
+      required: [text, submittedAt]
+      properties:
+        text:
+          type: string
+        submittedAt:
+          type: string
+
+    BlockerWordFrequencyEntry:
+      type: object
+      required: [word, count, sourceResponses]
+      properties:
+        word:
+          type: string
+        count:
+          type: integer
+        sourceResponses:
+          type: array
+          items:
+            $ref: '#/components/schemas/BlockerSourceResponse'
+
+    BlockerThemeResult:
+      type: object
+      required: [theme, themeId, count, examples]
+      properties:
+        theme:
+          type: string
+        themeId:
+          type: string
+        count:
+          type: integer
+        examples:
+          type: array
+          items:
+            type: string
+        color:
+          type: string
+          nullable: true
+
+    RecentBlockerResponse:
+      type: object
+      required: [blocker, task, submittedAt]
+      properties:
+        blocker:
+          type: string
+        task:
+          type: string
+        submittedAt:
+          type: string
 
     SurveyTypeDistribution:
       type: object
