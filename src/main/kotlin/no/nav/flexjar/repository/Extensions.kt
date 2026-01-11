@@ -12,6 +12,14 @@ private val log = LoggerFactory.getLogger("Extensions")
 private val json = Json { ignoreUnknownKeys = true }
 private val sensitiveDataFilter = SensitiveDataFilter.DEFAULT
 
+private fun parseTags(tags: String?): List<String> {
+    return tags
+        ?.split(",")
+        ?.map { it.trim() }
+        ?.filter { it.isNotBlank() }
+        ?: emptyList()
+}
+
 fun ResultRow.toDto(): FeedbackDto {
      return FeedbackDbRecord(
         id = this[FeedbackTable.id],
@@ -30,6 +38,7 @@ fun FeedbackDbRecord.createEmptyDto(): FeedbackDto {
         app = app,
         surveyId = "unknown",
         answers = emptyList(),
+        tags = parseTags(tags),
         sensitiveDataRedacted = false
     )
 }
@@ -45,6 +54,9 @@ fun FeedbackDbRecord.toDto(): FeedbackDto {
     val jsonObj = jsonElement.jsonObject
     val surveyId = jsonObj["surveyId"]?.jsonPrimitive?.content ?: "unknown"
     val surveyVersion = jsonObj["surveyVersion"]?.jsonPrimitive?.contentOrNull
+
+    val visitStartedAt = jsonObj["startedAt"]?.jsonPrimitive?.contentOrNull
+    val durationMs = jsonObj["timeToCompleteMs"]?.jsonPrimitive?.longOrNull
     
     val surveyTypeStr = jsonObj["surveyType"]?.jsonPrimitive?.contentOrNull
     val surveyType = when (surveyTypeStr) {
@@ -150,5 +162,19 @@ fun FeedbackDbRecord.toDto(): FeedbackDto {
         answers.add(Answer(fieldId, fieldType, Question(questionLabel, questionDescription, questionOptions), answerValue))
     }
     
-    return FeedbackDto(id, opprettet.toString(), app, surveyId, surveyVersion, surveyType, context, metadata, answers, hasRedactions)
+    return FeedbackDto(
+        id = id,
+        submittedAt = opprettet.toString(),
+        app = app,
+        surveyId = surveyId,
+        surveyVersion = surveyVersion,
+        surveyType = surveyType,
+        context = context,
+        metadata = metadata,
+        answers = answers,
+        tags = parseTags(tags),
+        sensitiveDataRedacted = hasRedactions,
+        durationMs = durationMs,
+        visitStartedAt = visitStartedAt
+    )
 }

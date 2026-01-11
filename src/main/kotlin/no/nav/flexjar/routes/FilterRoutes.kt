@@ -9,6 +9,8 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import no.nav.flexjar.config.auth.authorizedTeam
+import no.nav.flexjar.config.auth.authorizedTeams
+import no.nav.flexjar.config.auth.authorizedPrincipal
 import no.nav.flexjar.integrations.valkey.StringCache
 import no.nav.flexjar.integrations.valkey.ValkeyStringCache
 import no.nav.flexjar.repository.FeedbackRepository
@@ -51,8 +53,11 @@ fun Route.filterRoutes(
 ) {
     get<ApiV1Intern.Filters.Bootstrap> {
         val team = call.authorizedTeam
+        val teams = call.authorizedTeams
+        val principal = call.authorizedPrincipal
 
-        val cacheKey = "team=${team}".lowercase()
+        // Cache is shared across users (Valkey). Include user identity to avoid leaking `availableTeams`.
+        val cacheKey = "user=${principal.navIdent}&team=${team}".lowercase()
 
         bootstrapCache.get(cacheKey)?.let { cachedJson ->
             call.response.headers.append(HttpHeaders.CacheControl, "private, max-age=300")
@@ -69,7 +74,7 @@ fun Route.filterRoutes(
         val response = FilterBootstrapResponse(
             generatedAt = Instant.now().toString(),
             selectedTeam = team,
-            availableTeams = listOf(team), // For now, user has access to one team
+            availableTeams = teams.sorted(),
             apps = apps.sorted(),
             surveysByApp = surveysByApp.mapValues { it.value.sorted() }.toSortedMap(),
             tags = tags.sorted()

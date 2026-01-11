@@ -1,5 +1,7 @@
 package no.nav.flexjar.domain
 
+import kotlinx.serialization.EncodeDefault
+import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JsonObject
@@ -191,7 +193,13 @@ data class FeedbackDto(
     /** Custom metadata for segmentation/filtering in analytics */
     val metadata: Map<String, String>? = null,
     val answers: List<Answer>,
-    val sensitiveDataRedacted: Boolean = false
+    /** User-defined tags set in analytics (stored separately from submission payload). */
+    val tags: List<String> = emptyList(),
+    val sensitiveDataRedacted: Boolean = false,
+    /** Duration in milliseconds from visit start to submission (from widget submission). */
+    val durationMs: Long? = null,
+    /** ISO timestamp when the user started the session/task (from widget submission). */
+    val visitStartedAt: String? = null
 )
 
 /**
@@ -243,10 +251,20 @@ data class FeedbackStats(
     val period: StatsPeriod,
     val surveyType: SurveyType? = null,
     // New fields for analytics dashboard
+    @OptIn(ExperimentalSerializationApi::class)
+    @EncodeDefault(EncodeDefault.Mode.ALWAYS)
     val ratingByDate: Map<String, RatingByDateEntry> = emptyMap(),
+    @OptIn(ExperimentalSerializationApi::class)
+    @EncodeDefault(EncodeDefault.Mode.ALWAYS)
     val byDevice: Map<String, DeviceStats> = emptyMap(),
+    @OptIn(ExperimentalSerializationApi::class)
+    @EncodeDefault(EncodeDefault.Mode.ALWAYS)
     val byPathname: Map<String, PathnameStats> = emptyMap(),
+    @OptIn(ExperimentalSerializationApi::class)
+    @EncodeDefault(EncodeDefault.Mode.ALWAYS)
     val lowestRatingPaths: Map<String, PathnameStats> = emptyMap(),
+    @OptIn(ExperimentalSerializationApi::class)
+    @EncodeDefault(EncodeDefault.Mode.ALWAYS)
     val fieldStats: List<FieldStat> = emptyList(),
     // Privacy threshold info
     val privacy: PrivacyInfo? = null
@@ -273,12 +291,64 @@ data class PathnameStats(
 @Serializable
 data class FieldStat(
     val fieldId: String,
-    val fieldType: String,
+    val fieldType: FieldType,
     val label: String,
-    val stats: FieldStatDetails
+    val stats: FieldStats
+)
+
+// Mirrors frontend discriminated union on `type`.
+@Serializable
+sealed class FieldStats {
+    abstract val type: String
+
+    @Serializable
+    @SerialName("rating")
+    data class Rating(
+        override val type: String = "rating",
+        val average: Double,
+        /** Keys are serialized as strings in JSON ("1".."5"). */
+        val distribution: Map<String, Int>
+    ) : FieldStats()
+
+    @Serializable
+    @SerialName("text")
+    data class Text(
+        override val type: String = "text",
+        val responseCount: Int,
+        val responseRate: Double,
+        val topKeywords: List<KeywordCount> = emptyList(),
+        val recentResponses: List<RecentTextResponse> = emptyList()
+    ) : FieldStats()
+
+    @Serializable
+    @SerialName("choice")
+    data class Choice(
+        override val type: String = "choice",
+        val distribution: Map<String, ChoiceDistributionEntry>
+    ) : FieldStats()
+}
+
+@Serializable
+data class KeywordCount(
+    val word: String,
+    val count: Int
 )
 
 @Serializable
+data class RecentTextResponse(
+    val text: String,
+    val submittedAt: String
+)
+
+@Serializable
+data class ChoiceDistributionEntry(
+    val label: String,
+    val count: Int,
+    val percentage: Int
+)
+
+@Serializable
+@Deprecated("Replaced by FieldStats sealed class")
 data class FieldStatDetails(
     val type: String,
     val average: Double? = null,

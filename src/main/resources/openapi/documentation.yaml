@@ -37,58 +37,70 @@ paths:
           in: query
           schema:
             type: string
-            default: flex
-          description: Filter by team
+          description: Select team context for this request (validated against your team access)
         - name: app
           in: query
           schema:
             type: string
           description: Filter by app (or 'alle' for all)
-        - name: from
+        - name: fromDate
           in: query
           schema:
             type: string
             format: date
-          description: Start date (ISO format)
-        - name: to
+          description: Start date (YYYY-MM-DD, Europe/Oslo inclusive)
+        - name: toDate
           in: query
           schema:
             type: string
             format: date
-          description: End date (ISO format)
+          description: End date (YYYY-MM-DD, Europe/Oslo inclusive)
         - name: surveyId
           in: query
           schema:
             type: string
           description: Filter by survey ID
-        - name: medTekst
+        - name: hasText
           in: query
           schema:
             type: boolean
             default: false
-          description: Only include feedback with text
-        - name: stjerne
+          description: Only include feedback with text responses
+        - name: lowRating
           in: query
           schema:
             type: boolean
             default: false
-          description: Only include starred feedback
-        - name: tags
+          description: Only include low ratings (1-2)
+        - name: tag
+          in: query
+          schema:
+            type: array
+            items:
+              type: string
+          style: form
+          explode: true
+          description: Tags filter (repeat params like tag=foo&tag=bar; each entry may also be comma-separated)
+        - name: query
           in: query
           schema:
             type: string
-          description: Comma-separated list of tags
-        - name: fritekst
-          in: query
-          schema:
-            type: string
-          description: Free text search (space-separated terms)
+          description: Full-text search query
         - name: deviceType
           in: query
           schema:
             type: string
             enum: [mobile, tablet, desktop]
           description: Filter by device type
+        - name: segment
+          in: query
+          schema:
+            type: array
+            items:
+              type: string
+          style: form
+          explode: true
+          description: Segment filter (repeat params like segment=key:value)
         - name: page
           in: query
           schema:
@@ -231,6 +243,238 @@ paths:
               schema:
                 $ref: '#/components/schemas/TeamsAndApps'
 
+  /api/v1/intern/feedback/metadata-keys:
+    get:
+      tags: [Analytics]
+      summary: List metadata keys and values for a survey
+      description: Returns metadata keys with value counts. Keys with high cardinality can be filtered out using maxCardinality.
+      security:
+        - azure: []
+      parameters:
+        - name: team
+          in: query
+          schema:
+            type: string
+          description: Select team context for this request (validated against your team access)
+        - name: surveyId
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: maxCardinality
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 10
+          description: Max unique values per key. Keys with more values are filtered out.
+      responses:
+        '200':
+          description: Metadata keys and values
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MetadataKeysResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /api/v1/intern/surveys:
+    get:
+      tags: [Analytics]
+      summary: List surveys grouped by app
+      description: Returns all known survey IDs for the authorized team, grouped by app.
+      security:
+        - azure: []
+      parameters:
+        - name: team
+          in: query
+          schema:
+            type: string
+          description: Select team context for this request (validated against your team access)
+      responses:
+        '200':
+          description: Surveys grouped by app
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SurveysByApp'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /api/v1/intern/surveys/{surveyId}/context-tags:
+    get:
+      tags: [Analytics]
+      summary: List context tags and values for a survey
+      description: Returns context.tags keys with value counts (low-cardinality segmentation) for the authorized team.
+      security:
+        - azure: []
+      parameters:
+        - name: team
+          in: query
+          schema:
+            type: string
+          description: Select team context for this request (validated against your team access)
+        - name: surveyId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: maxCardinality
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 10
+          description: Max unique values per key. Keys with more values are filtered out.
+        - name: task
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Task filter for Top Tasks drill-down (matches option label)
+        - name: segment
+          in: query
+          schema:
+            type: array
+            items:
+              type: string
+          style: form
+          explode: true
+          description: Segment filter (repeat params like segment=key:value)
+      responses:
+        '200':
+          description: Context tags
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ContextTagsResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /api/v1/intern/filters/bootstrap:
+    get:
+      tags: [Analytics]
+      summary: Fetch filter bootstrap data
+      description: Provides apps, surveys, tags, and team list for populating the FilterBar.
+      security:
+        - azure: []
+      parameters:
+        - name: team
+          in: query
+          schema:
+            type: string
+          description: Select team context for this request (validated against your team access)
+      responses:
+        '200':
+          description: Filter bootstrap
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FilterBootstrapResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /api/v1/intern/themes:
+    get:
+      tags: [Analytics]
+      summary: List text themes
+      description: Returns team-scoped themes. Optional `context` filter for GENERAL_FEEDBACK or BLOCKER.
+      security:
+        - azure: []
+      parameters:
+        - name: team
+          in: query
+          schema:
+            type: string
+          description: Select team context for this request (validated against your team access)
+        - name: context
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [GENERAL_FEEDBACK, BLOCKER]
+      responses:
+        '200':
+          description: Theme list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/TextThemeDto'
+    post:
+      tags: [Analytics]
+      summary: Create text theme
+      security:
+        - azure: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateThemeRequest'
+      responses:
+        '201':
+          description: Theme created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TextThemeDto'
+
+  /api/v1/intern/themes/{id}:
+    put:
+      tags: [Analytics]
+      summary: Update text theme
+      security:
+        - azure: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateThemeRequest'
+      responses:
+        '200':
+          description: Theme updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TextThemeDto'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    delete:
+      tags: [Analytics]
+      summary: Delete text theme
+      security:
+        - azure: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '204':
+          description: Theme deleted
+        '404':
+          $ref: '#/components/responses/NotFound'
+
   /api/v1/intern/surveys/{surveyId}:
     delete:
       tags: [Analytics]
@@ -274,16 +518,334 @@ paths:
           in: query
           schema:
             type: string
+          description: Select team context for this request (validated against your team access)
         - name: app
           in: query
           schema:
             type: string
-        - name: from
+        - name: fromDate
           in: query
           schema:
             type: string
             format: date
-        - name: to
+          description: Start date (YYYY-MM-DD, Europe/Oslo inclusive)
+        - name: toDate
+          in: query
+          schema:
+            type: string
+            format: date
+          description: End date (YYYY-MM-DD, Europe/Oslo inclusive)
+        - name: surveyId
+          in: query
+          schema:
+            type: string
+        - name: deviceType
+          in: query
+          schema:
+            type: string
+            enum: [mobile, tablet, desktop]
+        - name: segment
+          in: query
+          schema:
+            type: array
+            items:
+              type: string
+          style: form
+          explode: true
+          description: Segment filter (repeat params like segment=key:value)
+        - name: task
+          in: query
+          schema:
+            type: string
+          description: Task filter for Top Tasks drill-down (matches option label)
+      responses:
+        '200':
+          description: Statistics
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FeedbackStats'
+
+  /api/v1/intern/stats/overview:
+    get:
+      tags: [Analytics]
+      summary: Get stats overview
+      security:
+        - azure: []
+      parameters:
+        - name: team
+          in: query
+          schema:
+            type: string
+          description: Select team context for this request (validated against your team access)
+        - name: app
+          in: query
+          schema:
+            type: string
+        - name: fromDate
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: toDate
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: surveyId
+          in: query
+          schema:
+            type: string
+        - name: deviceType
+          in: query
+          schema:
+            type: string
+            enum: [mobile, tablet, desktop]
+        - name: segment
+          in: query
+          schema:
+            type: array
+            items:
+              type: string
+          style: form
+          explode: true
+      responses:
+        '200':
+          description: Stats overview
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StatsOverviewResponse'
+
+  /api/v1/intern/stats/ratings:
+    get:
+      tags: [Analytics]
+      summary: Get rating distribution
+      security:
+        - azure: []
+      parameters:
+        - name: team
+          in: query
+          schema:
+            type: string
+        - name: app
+          in: query
+          schema:
+            type: string
+        - name: fromDate
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: toDate
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: surveyId
+          in: query
+          schema:
+            type: string
+        - name: deviceType
+          in: query
+          schema:
+            type: string
+            enum: [mobile, tablet, desktop]
+        - name: segment
+          in: query
+          schema:
+            type: array
+            items:
+              type: string
+          style: form
+          explode: true
+      responses:
+        '200':
+          description: Rating distribution
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RatingDistribution'
+
+  /api/v1/intern/stats/timeline:
+    get:
+      tags: [Analytics]
+      summary: Get timeline
+      security:
+        - azure: []
+      parameters:
+        - name: team
+          in: query
+          schema:
+            type: string
+        - name: app
+          in: query
+          schema:
+            type: string
+        - name: fromDate
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: toDate
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: surveyId
+          in: query
+          schema:
+            type: string
+        - name: deviceType
+          in: query
+          schema:
+            type: string
+            enum: [mobile, tablet, desktop]
+        - name: segment
+          in: query
+          schema:
+            type: array
+            items:
+              type: string
+          style: form
+          explode: true
+      responses:
+        '200':
+          description: Timeline
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TimelineResponse'
+
+  /api/v1/intern/stats/top-tasks:
+    get:
+      tags: [Analytics]
+      summary: Get Top Tasks stats
+      security:
+        - azure: []
+      parameters:
+        - name: team
+          in: query
+          schema:
+            type: string
+        - name: app
+          in: query
+          schema:
+            type: string
+        - name: fromDate
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: toDate
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: surveyId
+          in: query
+          schema:
+            type: string
+        - name: deviceType
+          in: query
+          schema:
+            type: string
+            enum: [mobile, tablet, desktop]
+        - name: segment
+          in: query
+          schema:
+            type: array
+            items:
+              type: string
+          style: form
+          explode: true
+        - name: task
+          in: query
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Top Tasks stats
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TopTasksResponse'
+
+  /api/v1/intern/stats/blockers:
+    get:
+      tags: [Analytics]
+      summary: Get blocker stats
+      security:
+        - azure: []
+      parameters:
+        - name: team
+          in: query
+          schema:
+            type: string
+        - name: app
+          in: query
+          schema:
+            type: string
+        - name: fromDate
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: toDate
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: surveyId
+          in: query
+          schema:
+            type: string
+        - name: deviceType
+          in: query
+          schema:
+            type: string
+            enum: [mobile, tablet, desktop]
+        - name: segment
+          in: query
+          schema:
+            type: array
+            items:
+              type: string
+          style: form
+          explode: true
+        - name: task
+          in: query
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Blocker stats
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BlockerStatsResponse'
+
+  /api/v1/intern/stats/discovery:
+    get:
+      tags: [Analytics]
+      summary: Get discovery stats
+      security:
+        - azure: []
+      parameters:
+        - name: team
+          in: query
+          schema:
+            type: string
+        - name: app
+          in: query
+          schema:
+            type: string
+        - name: fromDate
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: toDate
           in: query
           schema:
             type: string
@@ -299,11 +861,107 @@ paths:
             enum: [mobile, tablet, desktop]
       responses:
         '200':
-          description: Statistics
+          description: Discovery stats
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/FeedbackStats'
+                $ref: '#/components/schemas/DiscoveryStatsResponse'
+
+  /api/v1/intern/stats/task-priority:
+    get:
+      tags: [Analytics]
+      summary: Get task priority stats
+      security:
+        - azure: []
+      parameters:
+        - name: team
+          in: query
+          schema:
+            type: string
+        - name: app
+          in: query
+          schema:
+            type: string
+        - name: fromDate
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: toDate
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: surveyId
+          in: query
+          schema:
+            type: string
+        - name: deviceType
+          in: query
+          schema:
+            type: string
+            enum: [mobile, tablet, desktop]
+        - name: segment
+          in: query
+          schema:
+            type: array
+            items:
+              type: string
+          style: form
+          explode: true
+      responses:
+        '200':
+          description: Task priority stats
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TaskPriorityResponse'
+
+  /api/v1/intern/stats/survey-types:
+    get:
+      tags: [Analytics]
+      summary: Get survey type distribution
+      security:
+        - azure: []
+      parameters:
+        - name: team
+          in: query
+          schema:
+            type: string
+        - name: app
+          in: query
+          schema:
+            type: string
+        - name: fromDate
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: toDate
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: deviceType
+          in: query
+          schema:
+            type: string
+            enum: [mobile, tablet, desktop]
+        - name: segment
+          in: query
+          schema:
+            type: array
+            items:
+              type: string
+          style: form
+          explode: true
+      responses:
+        '200':
+          description: Survey type distribution
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SurveyTypeDistribution'
 
   /api/v1/intern/export:
     get:
@@ -317,26 +975,68 @@ paths:
           in: query
           schema:
             type: string
-            enum: [csv, json, excel]
-            default: csv
+            enum: [CSV, JSON, EXCEL]
+            default: CSV
         - name: team
           in: query
           schema:
             type: string
+          description: Select team context for this request (validated against your team access)
         - name: app
           in: query
           schema:
             type: string
-        - name: from
+        - name: fromDate
           in: query
           schema:
             type: string
             format: date
-        - name: to
+          description: Start date (YYYY-MM-DD, Europe/Oslo inclusive)
+        - name: toDate
           in: query
           schema:
             type: string
             format: date
+          description: End date (YYYY-MM-DD, Europe/Oslo inclusive)
+        - name: surveyId
+          in: query
+          schema:
+            type: string
+        - name: hasText
+          in: query
+          schema:
+            type: boolean
+        - name: lowRating
+          in: query
+          schema:
+            type: boolean
+        - name: query
+          in: query
+          schema:
+            type: string
+        - name: tag
+          in: query
+          schema:
+            type: array
+            items:
+              type: string
+          style: form
+          explode: true
+          description: Tags filter (repeat params like tag=foo&tag=bar; each entry may also be comma-separated)
+        - name: deviceType
+          in: query
+          schema:
+            type: string
+            enum: [mobile, tablet, desktop]
+        - name: segment
+          in: query
+          schema:
+            type: array
+            items:
+              type: string
+          style: form
+          explode: true
+          description: Segment filter (repeat params like segment=key:value)
       responses:
         '200':
           description: Exported data
@@ -419,8 +1119,17 @@ components:
         surveyVersion:
           type: string
           nullable: true
+        surveyType:
+          type: string
+          nullable: true
+          enum: [rating, topTasks, discovery, taskPriority, custom]
         context:
           $ref: '#/components/schemas/SubmissionContext'
+        metadata:
+          type: object
+          nullable: true
+          additionalProperties:
+            type: string
         answers:
           type: array
           items:
@@ -431,6 +1140,14 @@ components:
             type: string
         sensitiveDataRedacted:
           type: boolean
+        durationMs:
+          type: integer
+          format: int64
+          nullable: true
+        visitStartedAt:
+          type: string
+          format: date-time
+          nullable: true
 
     SubmissionContext:
       type: object
@@ -446,6 +1163,11 @@ components:
           type: integer
         viewportHeight:
           type: integer
+        tags:
+          type: object
+          nullable: true
+          additionalProperties:
+            type: string
 
     Answer:
       type: object
@@ -471,6 +1193,13 @@ components:
                   const: rating
                 rating:
                   type: integer
+                ratingVariant:
+                  type: string
+                  nullable: true
+                  enum: [emoji, thumbs, stars, nps]
+                ratingScale:
+                  type: integer
+                  nullable: true
             - type: object
               properties:
                 type:
@@ -508,9 +1237,6 @@ components:
           type: integer
         countWithoutText:
           type: integer
-        averageRating:
-          type: number
-          nullable: true
         byRating:
           type: object
           additionalProperties:
@@ -523,7 +1249,32 @@ components:
           type: object
           additionalProperties:
             type: integer
+        bySurveyId:
+          type: object
+          additionalProperties:
+            type: integer
+        averageRating:
+          type: number
+          nullable: true
         byDevice:
+          type: object
+          additionalProperties:
+            type: object
+            properties:
+              count:
+                type: integer
+              averageRating:
+                type: number
+        byPathname:
+          type: object
+          additionalProperties:
+            type: object
+            properties:
+              count:
+                type: integer
+              averageRating:
+                type: number
+        lowestRatingPaths:
           type: object
           additionalProperties:
             type: object
@@ -541,6 +1292,103 @@ components:
                 type: number
               count:
                 type: integer
+        fieldStats:
+          type: array
+          items:
+            type: object
+            properties:
+              fieldId:
+                type: string
+              fieldType:
+                type: string
+                enum: [RATING, TEXT, SINGLE_CHOICE, MULTI_CHOICE, DATE]
+              label:
+                type: string
+              stats:
+                oneOf:
+                  - type: object
+                    properties:
+                      type:
+                        type: string
+                        const: rating
+                      average:
+                        type: number
+                      distribution:
+                        type: object
+                        additionalProperties:
+                          type: integer
+                  - type: object
+                    properties:
+                      type:
+                        type: string
+                        const: text
+                      responseCount:
+                        type: integer
+                      responseRate:
+                        type: number
+                      topKeywords:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            word:
+                              type: string
+                            count:
+                              type: integer
+                      recentResponses:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            text:
+                              type: string
+                            submittedAt:
+                              type: string
+                              format: date-time
+                  - type: object
+                    properties:
+                      type:
+                        type: string
+                        const: choice
+                      distribution:
+                        type: object
+                        additionalProperties:
+                          type: object
+                          properties:
+                            label:
+                              type: string
+                            count:
+                              type: integer
+                            percentage:
+                              type: integer
+        surveyType:
+          type: string
+          nullable: true
+          enum: [rating, topTasks, discovery, taskPriority, custom]
+        period:
+          type: object
+          properties:
+            fromDate:
+              type: string
+              format: date
+              nullable: true
+            toDate:
+              type: string
+              format: date
+              nullable: true
+            days:
+              type: integer
+        privacy:
+          type: object
+          nullable: true
+          properties:
+            masked:
+              type: boolean
+            reason:
+              type: string
+              nullable: true
+            threshold:
+              type: integer
 
     TeamsAndApps:
       type: object
@@ -551,6 +1399,325 @@ components:
             type: array
             items:
               type: string
+
+    ValueCount:
+      type: object
+      required: [value, count]
+      properties:
+        value:
+          type: string
+        count:
+          type: integer
+
+    SurveysByApp:
+      type: object
+      additionalProperties:
+        type: array
+        items:
+          type: string
+
+    MetadataKeysResponse:
+      type: object
+      required: [surveyId, metadataKeys]
+      properties:
+        surveyId:
+          type: string
+        maxCardinality:
+          type: integer
+          nullable: true
+        metadataKeys:
+          type: object
+          additionalProperties:
+            type: array
+            items:
+              $ref: '#/components/schemas/ValueCount'
+
+    ContextTagsResponse:
+      type: object
+      required: [surveyId, contextTags]
+      properties:
+        surveyId:
+          type: string
+        maxCardinality:
+          type: integer
+          nullable: true
+        contextTags:
+          type: object
+          additionalProperties:
+            type: array
+            items:
+              $ref: '#/components/schemas/ValueCount'
+
+    FilterBootstrapResponse:
+      type: object
+      required: [apps, surveys, allTags, availableTeams]
+      properties:
+        apps:
+          type: array
+          items:
+            type: string
+        surveys:
+          $ref: '#/components/schemas/SurveysByApp'
+        allTags:
+          type: array
+          items:
+            type: string
+        availableTeams:
+          type: array
+          items:
+            type: string
+
+    TextAnalysisContext:
+      type: string
+      enum: [GENERAL_FEEDBACK, BLOCKER]
+
+    TextThemeDto:
+      type: object
+      required: [id, name, keywords, context, priority]
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        keywords:
+          type: array
+          items:
+            type: string
+        color:
+          type: string
+          nullable: true
+        context:
+          $ref: '#/components/schemas/TextAnalysisContext'
+        priority:
+          type: integer
+
+    CreateThemeRequest:
+      type: object
+      required: [name, keywords, context]
+      properties:
+        name:
+          type: string
+        keywords:
+          type: array
+          items:
+            type: string
+        color:
+          type: string
+          nullable: true
+        context:
+          $ref: '#/components/schemas/TextAnalysisContext'
+        priority:
+          type: integer
+          nullable: true
+
+    UpdateThemeRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          nullable: true
+        keywords:
+          type: array
+          nullable: true
+          items:
+            type: string
+        color:
+          type: string
+          nullable: true
+        priority:
+          type: integer
+          nullable: true
+
+    DateRange:
+      type: object
+      required: [fromDate, toDate]
+      properties:
+        fromDate:
+          type: string
+          format: date
+        toDate:
+          type: string
+          format: date
+
+    StatsTotals:
+      type: object
+      required: [totalResponses, withText]
+      properties:
+        totalResponses:
+          type: integer
+        withText:
+          type: integer
+
+    StatsOverviewResponse:
+      type: object
+      required: [period, totals]
+      properties:
+        period:
+          $ref: '#/components/schemas/DateRange'
+        totals:
+          $ref: '#/components/schemas/StatsTotals'
+
+    RatingDistribution:
+      type: object
+      required: [distribution, average, total]
+      properties:
+        distribution:
+          type: object
+          additionalProperties:
+            type: integer
+        average:
+          type: number
+        total:
+          type: integer
+
+    TimelinePoint:
+      type: object
+      required: [date, count]
+      properties:
+        date:
+          type: string
+          format: date
+        count:
+          type: integer
+
+    TimelineResponse:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/TimelinePoint'
+
+    DailyStat:
+      type: object
+      required: [date, count]
+      properties:
+        date:
+          type: string
+          format: date
+        count:
+          type: integer
+
+    TopTaskStats:
+      type: object
+      required: [task, totalCount, dailyStats]
+      properties:
+        task:
+          type: string
+        totalCount:
+          type: integer
+        dailyStats:
+          type: array
+          items:
+            $ref: '#/components/schemas/DailyStat'
+
+    TopTasksResponse:
+      type: object
+      required: [tasks, totalResponses]
+      properties:
+        tasks:
+          type: array
+          items:
+            $ref: '#/components/schemas/TopTaskStats'
+        totalResponses:
+          type: integer
+
+    ThemeCount:
+      type: object
+      required: [themeId, themeName, count]
+      properties:
+        themeId:
+          type: string
+          format: uuid
+        themeName:
+          type: string
+        count:
+          type: integer
+
+    WordFrequency:
+      type: object
+      required: [word, count]
+      properties:
+        word:
+          type: string
+        count:
+          type: integer
+
+    BlockerStatsResponse:
+      type: object
+      required: [themes, wordFrequency, totalResponses]
+      properties:
+        themes:
+          type: array
+          items:
+            $ref: '#/components/schemas/ThemeCount'
+        wordFrequency:
+          type: array
+          items:
+            $ref: '#/components/schemas/WordFrequency'
+        totalResponses:
+          type: integer
+
+    DiscoveryStatsResponse:
+      type: object
+      required: [themes, totalResponses]
+      properties:
+        themes:
+          type: array
+          items:
+            $ref: '#/components/schemas/ThemeCount'
+        totalResponses:
+          type: integer
+
+    TaskVote:
+      type: object
+      required: [task, count]
+      properties:
+        task:
+          type: string
+        count:
+          type: integer
+
+    TaskPriorityResponse:
+      type: object
+      required: [totalSubmissions, tasks]
+      properties:
+        totalSubmissions:
+          type: integer
+        tasks:
+          type: array
+          items:
+            $ref: '#/components/schemas/TaskVote'
+        longNeckCutoff:
+          type: integer
+          nullable: true
+        cumulativePercentageAt5:
+          type: number
+          nullable: true
+
+    SurveyTypeCount:
+      type: object
+      required: [type, count, percentage]
+      properties:
+        type:
+          type: string
+        count:
+          type: integer
+        percentage:
+          type: number
+
+    SurveyTypeDistribution:
+      type: object
+      required: [totalSurveys, distribution]
+      properties:
+        totalSurveys:
+          type: integer
+        distribution:
+          type: array
+          items:
+            $ref: '#/components/schemas/SurveyTypeCount'
 
     FeedbackSubmission:
       type: object
