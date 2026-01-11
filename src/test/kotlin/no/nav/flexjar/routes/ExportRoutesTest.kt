@@ -36,7 +36,7 @@ class ExportRoutesTest : FunSpec({
         testApplication {
             application { testModule() }
             
-            insertTestFeedback(team = "flex", app = "spinnsyn", feedback = "Great app!")
+            insertTestFeedback(team = "flex", app = "spinnsyn", text = "Great app!")
             
             val response = createTestClient().get("/api/v1/intern/export?team=flex") {
                 header(HttpHeaders.Authorization, "Bearer test-token")
@@ -52,7 +52,7 @@ class ExportRoutesTest : FunSpec({
         testApplication {
             application { testModule() }
             
-            insertTestFeedback(team = "flex", feedback = "Nice feature")
+            insertTestFeedback(team = "flex", text = "Nice feature")
             
             val response = createTestClient().get("/api/v1/intern/export?team=flex&format=JSON") {
                 header(HttpHeaders.Authorization, "Bearer test-token")

@@ -89,13 +89,13 @@ class FeedbackRepositoryTest : FunSpec({
 
     context("findById") {
         test("returns feedback by id") {
-            val feedbackId = UUID.randomUUID().toString()
-            insertTestFeedback(id = feedbackId, team = "flex", feedback = "Test feedback text")
+            val id = UUID.randomUUID().toString()
+            insertTestFeedback(id = id, team = "flex", text = "Test feedback text")
             
-            val feedback = repository.findById(feedbackId)
+            val feedback = repository.findById(id)
             
             feedback.shouldNotBeNull()
-            feedback.id shouldBe feedbackId
+            feedback.id shouldBe id
         }
 
         test("returns null for non-existent id") {
@@ -145,10 +145,10 @@ class FeedbackRepositoryTest : FunSpec({
 
     context("tags operations") {
         test("addTag adds tag to existing feedback") {
-            val feedbackId = UUID.randomUUID().toString()
-            insertTestFeedback(id = feedbackId, tags = "existing-tag")
+            val id = UUID.randomUUID().toString()
+            insertTestFeedback(id = id, tags = "existing-tag")
             
-            val result = repository.addTag(feedbackId, "new-tag")
+            val result = repository.addTag(id, "new-tag")
             
             result shouldBe true
             
@@ -165,10 +165,10 @@ class FeedbackRepositoryTest : FunSpec({
         }
 
         test("removeTag removes tag from feedback") {
-            val feedbackId = UUID.randomUUID().toString()
-            insertTestFeedback(id = feedbackId, tags = "tag1,tag2")
+            val id = UUID.randomUUID().toString()
+            insertTestFeedback(id = id, tags = "tag1,tag2")
             
-            val result = repository.removeTag(feedbackId, "tag1")
+            val result = repository.removeTag(id, "tag1")
             
             result shouldBe true
         }
@@ -176,13 +176,13 @@ class FeedbackRepositoryTest : FunSpec({
 
     context("softDelete") {
         test("soft deletes feedback") {
-            val feedbackId = UUID.randomUUID().toString()
-            insertTestFeedback(id = feedbackId, feedback = "Sensitive feedback")
+            val id = UUID.randomUUID().toString()
+            insertTestFeedback(id = id, text = "Sensitive feedback")
             
-            val result = repository.softDelete(feedbackId)
+            val result = repository.softDelete(id)
             
             result shouldBe true
-            val feedback = repository.findById(feedbackId)
+            val feedback = repository.findById(id)
             // After soft delete, the feedback should still exist but be marked
             feedback.shouldNotBeNull()
         }

@@ -27,19 +27,32 @@ fun Route.feedbackRoutes(repository: FeedbackRepository = defaultFeedbackReposit
         // Team is already validated by TeamAuthorizationPlugin
         val team = call.authorizedTeam
 
+        // Parse segment params (format: "key:value")
+        val segments = params.segment?.mapNotNull { segmentStr ->
+            val parts = segmentStr.split(":", limit = 2)
+            if (parts.size == 2) Pair(parts[0], parts[1]) else null
+        } ?: emptyList()
+
+        val tags = params.tag
+            ?.flatMap { it.split(",") }
+            ?.map { it.trim() }
+            ?.filter { it.isNotBlank() }
+            ?: emptyList()
+
         val query = FeedbackQuery(
             team = team,
             app = params.app?.takeIf { it != FILTER_ALL },
             page = params.page,
             size = params.size ?: 10,
-            medTekst = params.medTekst ?: false,
-            stjerne = params.stjerne ?: false,
-            tags = params.tags?.split(",")?.filter { it.isNotBlank() } ?: emptyList(),
-            fritekst = params.fritekst?.split(" ")?.filter { it.isNotBlank() } ?: emptyList(),
-            from = params.from,
-            to = params.to,
-            feedbackId = params.feedbackId,
-            deviceType = params.deviceType?.takeIf { it.isNotBlank() }
+            hasText = params.hasText ?: false,
+            lowRating = params.lowRating ?: false,
+            tags = tags,
+            query = params.query?.takeIf { it.isNotBlank() },
+            fromDate = params.fromDate,
+            toDate = params.toDate,
+            surveyId = params.surveyId,
+            deviceType = params.deviceType?.takeIf { it.isNotBlank() },
+            segments = segments
         )
         
         val (content, total, page) = repository.findPaginated(query)
@@ -119,7 +132,8 @@ fun Route.feedbackRoutes(repository: FeedbackRepository = defaultFeedbackReposit
     
     // Get all metadata keys and values (filtered by cardinality for graph-friendly data)
     get<ApiV1Intern.Feedback.MetadataKeys> { params ->
-        val metadataKeys = repository.findMetadataKeysForSurvey(params.feedbackId, params.team)
+        val team = call.authorizedTeam
+        val metadataKeys = repository.findMetadataKeysForSurvey(params.surveyId, team)
         
         // Filter by cardinality if specified (default 10)
         val maxCard = params.maxCardinality
@@ -130,17 +144,25 @@ fun Route.feedbackRoutes(repository: FeedbackRepository = defaultFeedbackReposit
         }
         
         call.respond(mapOf(
-            "feedbackId" to params.feedbackId,
+            "surveyId" to params.surveyId,
             "metadataKeys" to filteredKeys,
             "maxCardinality" to maxCard
         ))
     }
 
-    // Get all context tags and values with counts (filtered by cardinality for graph-friendly data)
-    get<ApiV1Intern.Feedback.ContextTags> { params ->
+    // Get all surveys (grouped by app)
+    get<ApiV1Intern.Surveys> {
+        val teamsAndApps = repository.findAllTeamsAndApps()
+        call.respond(teamsAndApps)
+    }
+}
+
+fun Route.surveyFacetRoutes(repository: FeedbackRepository = defaultFeedbackRepository) {
+    // Get all context tags and values with counts for a survey (filtered by cardinality)
+    get<ApiV1Intern.Surveys.Id.ContextTags> { params ->
         val team = call.authorizedTeam
 
-        val contextTags = repository.findContextTagsForSurvey(params.feedbackId, team)
+        val contextTags = repository.findContextTagsForSurvey(params.parent.surveyId, team)
 
         val maxCard = params.maxCardinality
         val filteredTags = if (maxCard != null) {
@@ -151,16 +173,10 @@ fun Route.feedbackRoutes(repository: FeedbackRepository = defaultFeedbackReposit
 
         call.respond(
             ContextTagsResponse(
-                feedbackId = params.feedbackId,
+                surveyId = params.parent.surveyId,
                 contextTags = filteredTags,
-                maxCardinality = maxCard
+                maxCardinality = maxCard,
             )
         )
-    }
-
-    // Get all surveys (grouped by app)
-    get<ApiV1Intern.Surveys> {
-        val teamsAndApps = repository.findAllTeamsAndApps()
-        call.respond(teamsAndApps)
     }
 }

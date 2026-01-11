@@ -91,13 +91,13 @@ Local operational endpoints:
 - **Ktor testApplication**: Use `testModule()` helper which bypasses Texas and installs a test bearer realm
 
 ## API Conventions
-1. **Query params**: `team`, `app`, `from`, `to`, `feedbackId`, `tags`, `fritekst`, `page`, `size`
+1. **Query params**: `team`, `app`, `from`, `to`, `surveyId`, `tags`, `fritekst`, `page`, `size`
 2. **Response format**: `Page<T>` wrapper with `content`, `totalElements`, `totalPages`
-3. **Reserved payload keys**: Widget sends `svar` (rating) and `feedback` (main text)
+3. **Submission contract**: Canonical payload uses `schemaVersion=1`, `surveyId`, `surveyType`, `submittedAt`, and structured `answers[]` (no legacy flat keys)
 4. **Error responses**: Use Ktor status pages for consistent JSON errors
 
 ## Related Repositories
-- **[flexjar-widget](https://github.com/navikt/flexjar-widget)**: Survey widget that POSTs to `/api/v1/feedback`. Sends `svar` (rating) and `feedback` (text) keys.
+- **[flexjar-widget](https://github.com/navikt/flexjar-widget)**: Survey widget that POSTs to `/api/v1/feedback` with `schemaVersion=1` and structured `answers[]`.
 - **[flexjar-analytics](https://github.com/navikt/flexjar-analytics)**: Dashboard that calls `/api/v1/intern/*` endpoints. DTOs in `domain/` must match `lib/api.ts` types.
 
 ## Sensitive Data Patterns

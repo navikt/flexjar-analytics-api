@@ -43,7 +43,7 @@ fun FeedbackDbRecord.toDto(): FeedbackDto {
     }
     
     val jsonObj = jsonElement.jsonObject
-    val surveyId = jsonObj["surveyId"]?.jsonPrimitive?.content ?: jsonObj["feedbackId"]?.jsonPrimitive?.content ?: "unknown"
+    val surveyId = jsonObj["surveyId"]?.jsonPrimitive?.content ?: "unknown"
     val surveyVersion = jsonObj["surveyVersion"]?.jsonPrimitive?.contentOrNull
     
     val surveyTypeStr = jsonObj["surveyType"]?.jsonPrimitive?.contentOrNull
@@ -116,7 +116,15 @@ fun FeedbackDbRecord.toDto(): FeedbackDto {
         val answerValue: AnswerValue = when (valueType) {
             "rating" -> {
                 val rating = valueObj["rating"]?.jsonPrimitive?.int ?: continue
-                AnswerValue.Rating(rating)
+                val ratingVariant = valueObj["ratingVariant"]?.jsonPrimitive?.contentOrNull?.let { v ->
+                    try {
+                        RatingVariant.valueOf(v.uppercase())
+                    } catch (_: Exception) {
+                        null
+                    }
+                }
+                val ratingScale = valueObj["ratingScale"]?.jsonPrimitive?.intOrNull
+                AnswerValue.Rating(rating = rating, ratingVariant = ratingVariant, ratingScale = ratingScale)
             }
             "text" -> {
                 val text = valueObj["text"]?.jsonPrimitive?.content ?: ""

@@ -27,12 +27,16 @@ object TestDatabase {
     }
     
     private var _dataSource: HikariDataSource? = null
+    @Volatile
+    private var initialized: Boolean = false
     
     val dataSource: DataSource
-        get() = _dataSource ?: createDataSource().also { 
-            _dataSource = it
-            // Initialize the production DatabaseHolder with test datasource
-            DatabaseHolder.initializeForTesting(it)
+        get() = synchronized(this) {
+            _dataSource ?: createDataSource().also {
+                _dataSource = it
+                // Initialize the production DatabaseHolder with test datasource
+                DatabaseHolder.initializeForTesting(it)
+            }
         }
     
     private fun createDataSource(): HikariDataSource {
@@ -52,15 +56,20 @@ object TestDatabase {
      * Initialize the test database: run migrations and connect Exposed.
      */
     fun initialize() {
-        // Run migrations
-        Flyway.configure()
-            .dataSource(dataSource)
-            .locations("classpath:db/migration")
-            .cleanDisabled(false)
-            .load()
-            .migrate()
-            
-        Database.connect(dataSource)
+        synchronized(this) {
+            if (initialized) return
+
+            // Run migrations
+            Flyway.configure()
+                .dataSource(dataSource)
+                .locations("classpath:db/migration")
+                .cleanDisabled(false)
+                .load()
+                .migrate()
+
+            Database.connect(dataSource)
+            initialized = true
+        }
     }
     
     /**
@@ -80,7 +89,10 @@ object TestDatabase {
      */
     fun reset() {
         DatabaseHolder.reset()
-        _dataSource?.close()
-        _dataSource = null
+        synchronized(this) {
+            _dataSource?.close()
+            _dataSource = null
+            initialized = false
+        }
     }
 }

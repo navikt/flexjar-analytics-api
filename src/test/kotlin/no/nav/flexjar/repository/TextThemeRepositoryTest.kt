@@ -5,6 +5,7 @@ import io.kotest.matchers.collections.shouldBeEmpty
 import io.kotest.matchers.shouldBe
 import no.nav.flexjar.TestDatabase
 import no.nav.flexjar.config.DatabaseHolder
+import no.nav.flexjar.domain.AnalysisContext
 import no.nav.flexjar.domain.CreateThemeRequest
 import java.util.UUID
 
@@ -32,7 +33,8 @@ class TextThemeRepositoryTest : FunSpec({
                 name = "Sykepenger",
                 keywords = listOf("syk", "sykemelding"),
                 color = "#FF0000",
-                priority = 10
+                priority = 10,
+                analysisContext = AnalysisContext.GENERAL_FEEDBACK
             ))
             
             val themes = repository.findByTeam("flex")
@@ -47,7 +49,8 @@ class TextThemeRepositoryTest : FunSpec({
         test("findByTeam returns empty for other team") {
             repository.create("flex", CreateThemeRequest(
                 name = "Test",
-                keywords = listOf("test")
+                keywords = listOf("test"),
+                analysisContext = AnalysisContext.GENERAL_FEEDBACK
             ))
             
             val themes = repository.findByTeam("other-team")
@@ -56,9 +59,9 @@ class TextThemeRepositoryTest : FunSpec({
         }
 
         test("findByTeam orders by priority descending") {
-            repository.create("flex", CreateThemeRequest("Low", listOf("low"), priority = 1))
-            repository.create("flex", CreateThemeRequest("High", listOf("high"), priority = 100))
-            repository.create("flex", CreateThemeRequest("Medium", listOf("med"), priority = 50))
+            repository.create("flex", CreateThemeRequest("Low", listOf("low"), priority = 1, analysisContext = AnalysisContext.GENERAL_FEEDBACK))
+            repository.create("flex", CreateThemeRequest("High", listOf("high"), priority = 100, analysisContext = AnalysisContext.GENERAL_FEEDBACK))
+            repository.create("flex", CreateThemeRequest("Medium", listOf("med"), priority = 50, analysisContext = AnalysisContext.GENERAL_FEEDBACK))
             
             val themes = repository.findByTeam("flex")
             
@@ -70,13 +73,15 @@ class TextThemeRepositoryTest : FunSpec({
         test("update modifies theme") {
             val created = repository.create("flex", CreateThemeRequest(
                 name = "Original",
-                keywords = listOf("old")
+                keywords = listOf("old"),
+                analysisContext = AnalysisContext.GENERAL_FEEDBACK
             ))
             
             repository.update(UUID.fromString(created.id), no.nav.flexjar.domain.UpdateThemeRequest(
                 name = "Updated",
                 keywords = listOf("new", "keywords"),
-                priority = 99
+                priority = 99,
+                analysisContext = AnalysisContext.GENERAL_FEEDBACK
             ))
             
             val theme = repository.findById(UUID.fromString(created.id))
@@ -88,7 +93,8 @@ class TextThemeRepositoryTest : FunSpec({
         test("delete removes theme") {
             val created = repository.create("flex", CreateThemeRequest(
                 name = "ToDelete",
-                keywords = listOf("delete")
+                keywords = listOf("delete"),
+                analysisContext = AnalysisContext.GENERAL_FEEDBACK
             ))
             
             val deleted = repository.delete(UUID.fromString(created.id))
@@ -100,7 +106,8 @@ class TextThemeRepositoryTest : FunSpec({
         test("belongsToTeam returns true for matching team") {
             val created = repository.create("flex", CreateThemeRequest(
                 name = "Owned",
-                keywords = listOf("owned")
+                keywords = listOf("owned"),
+                analysisContext = AnalysisContext.GENERAL_FEEDBACK
             ))
             
             repository.belongsToTeam(UUID.fromString(created.id), "flex") shouldBe true

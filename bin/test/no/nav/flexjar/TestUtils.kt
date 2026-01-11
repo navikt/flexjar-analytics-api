@@ -12,12 +12,15 @@ import no.nav.flexjar.config.auth.BrukerPrincipal
 import no.nav.flexjar.config.auth.TeamAuthorizationPlugin
 import no.nav.flexjar.config.configureSerialization
 import no.nav.flexjar.config.configureStatusPages
+import no.nav.flexjar.config.configureRateLimiting
 import no.nav.flexjar.config.DatabaseHolder
 import no.nav.flexjar.repository.FeedbackRepository
 import no.nav.flexjar.routes.feedbackRoutes
 import no.nav.flexjar.routes.internalRoutes
 import no.nav.flexjar.routes.statsRoutes
 import no.nav.flexjar.routes.exportRoutes
+import no.nav.flexjar.routes.surveyFacetRoutes
+import no.nav.flexjar.routes.submissionRoutes
 import no.nav.flexjar.repository.FeedbackStatsRepository
 import no.nav.flexjar.service.StatsService
 import no.nav.flexjar.service.ExportService
@@ -44,8 +47,10 @@ fun insertTestFeedback(
     id: String = UUID.randomUUID().toString(),
     team: String = "team-test",
     app: String = "app-test",
-    svar: Int = 4,
-    feedback: String = "Test feedback",
+    rating: Int = 4,
+    text: String = "Test feedback",
+    surveyId: String = "survey-$id",
+    surveyType: String = "rating",
     tags: String? = null,
     opprettet: OffsetDateTime = OffsetDateTime.now()
 ) {
@@ -58,20 +63,29 @@ fun insertTestFeedback(
             stmt.setObject(2, java.sql.Timestamp.from(opprettet.toInstant()))
             stmt.setString(3, """
                 {
-                    "feedbackId": "$id",
-                    "team": "$team",
-                    "app": "$app",
-                    "svar": $svar,
+                    "schemaVersion": 1,
+                    "surveyId": "$surveyId",
+                    "surveyType": "$surveyType",
                     "context": {
                         "pathname": "/test/path",
                         "deviceType": "desktop"
                     },
                     "answers": [
-                        {"questionId": "svar", "value": $svar, "questionPrompt": "Hvordan opplevde du tjenesten?"},
-                        {"questionId": "feedback", "value": "$feedback", "questionPrompt": "Har du tilbakemelding?"}
+                        {
+                          "fieldId": "svar",
+                          "fieldType": "RATING",
+                          "question": {"label": "Hvordan opplevde du tjenesten?"},
+                          "value": {"type": "rating", "rating": $rating, "ratingVariant": "emoji", "ratingScale": 5}
+                        },
+                        {
+                          "fieldId": "feedback",
+                          "fieldType": "TEXT",
+                          "question": {"label": "Har du tilbakemelding?"},
+                          "value": {"type": "text", "text": "$text"}
+                        }
                     ],
-                    "startedAt": "${opprettet.minusMinutes(1)}",
-                    "submittedAt": "$opprettet"
+                    "startedAt": "${opprettet.minusMinutes(1).toInstant()}",
+                    "submittedAt": "${opprettet.toInstant()}"
                 }
             """.trimIndent())
             stmt.setString(4, team)
@@ -96,6 +110,7 @@ fun Application.testModule(
     
     configureSerialization()
     configureStatusPages()
+    configureRateLimiting()
     install(io.ktor.server.resources.Resources)
     
     // Test auth that creates a BrukerPrincipal from any "Bearer" token
@@ -129,11 +144,16 @@ fun Application.testModule(
     
     routing {
         internalRoutes()
+
+        // Public submission API (local mode in tests)
+        submissionRoutes(feedbackRepository)
+
         authenticate("test-azure") {
             // Install TeamAuthorizationPlugin like production
             install(TeamAuthorizationPlugin)
             
             feedbackRoutes(feedbackRepository)
+            surveyFacetRoutes(feedbackRepository)
             statsRoutes(statsService)
             exportRoutes(exportService)
         }

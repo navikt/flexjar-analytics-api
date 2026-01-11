@@ -5,19 +5,27 @@ import io.ktor.server.plugins.ratelimit.*
 import io.ktor.server.request.*
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
+import kotlinx.serialization.SerializationException
 import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.jsonObject
-import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.JsonElement
 import no.nav.flexjar.config.SubmissionRateLimit
 import no.nav.flexjar.config.auth.SubmissionAuthPlugin
 import no.nav.flexjar.config.auth.getCallerIdentity
 import no.nav.flexjar.config.exception.ApiErrorException
+import no.nav.flexjar.domain.AnswerValue
+import no.nav.flexjar.domain.FeedbackSubmissionV1
+import no.nav.flexjar.domain.RatingVariant
 import no.nav.flexjar.repository.FeedbackRepository
 import org.slf4j.LoggerFactory
+import java.time.Instant
 
 private val log = LoggerFactory.getLogger("SubmissionRoutes")
-private val feedbackRepository = FeedbackRepository()
-private val json = Json { ignoreUnknownKeys = true }
+
+private val strictJson = Json {
+    ignoreUnknownKeys = false
+    isLenient = false
+    encodeDefaults = true
+}
 
 /**
  * Submission routes for feedback collection.
@@ -28,108 +36,136 @@ private val json = Json { ignoreUnknownKeys = true }
  * 
  * Rate limited to 100 requests per minute per calling application.
  */
-fun Route.submissionRoutes() {
+fun Route.submissionRoutes(feedbackRepository: FeedbackRepository = FeedbackRepository()) {
     rateLimit(SubmissionRateLimit) {
         route("/api") {
             // Install authentication plugin for all submission routes
             install(SubmissionAuthPlugin)
-            
-            // V1 legacy endpoint
+
+            // Canonical submission endpoint (schemaVersion=1)
             post("/v1/feedback") {
-                handleSubmission(call, returnId = false)
-            }
-            
-            // V2 endpoint - returns ID
-            post("/v2/feedback") {
-                handleSubmission(call, returnId = true)
-            }
-            
-            // V2 update endpoint
-            put("/v2/feedback/{id}") {
-                handleUpdate(call)
-            }
-            
-            // Azure variants (same behavior, different paths for backwards compatibility)
-            post("/v1/feedback/azure") {
-                handleSubmission(call, returnId = false)
-            }
-            
-            post("/azure/v2/feedback") {
-                handleSubmission(call, returnId = true)
-            }
-            
-            put("/azure/v2/feedback/{id}") {
-                handleUpdate(call)
+                handleSubmissionV1(call, feedbackRepository)
             }
         }
     }
 }
 
-private suspend fun handleSubmission(call: io.ktor.server.application.ApplicationCall, returnId: Boolean) {
-    // Get authenticated caller identity (set by SubmissionAuthPlugin)
+private fun validateSubmissionV1(submission: FeedbackSubmissionV1) {
+    if (submission.schemaVersion != 1) {
+        throw ApiErrorException.BadRequestException(
+            "UNSUPPORTED_SCHEMA: schemaVersion=${submission.schemaVersion} is not supported"
+        )
+    }
+
+    if (submission.surveyId.isBlank()) {
+        throw ApiErrorException.BadRequestException("Invalid payload: surveyId must be non-blank")
+    }
+
+    runCatching { Instant.parse(submission.submittedAt) }
+        .getOrElse { throw ApiErrorException.BadRequestException("Invalid payload: submittedAt must be an ISO instant") }
+
+    if (submission.startedAt != null) {
+        runCatching { Instant.parse(submission.startedAt) }
+            .getOrElse { throw ApiErrorException.BadRequestException("Invalid payload: startedAt must be an ISO instant") }
+    }
+
+    if (submission.answers.isEmpty()) {
+        throw ApiErrorException.BadRequestException("Invalid payload: answers must be non-empty")
+    }
+
+    val duplicateFieldIds = submission.answers
+        .groupBy { it.fieldId }
+        .filterValues { it.size > 1 }
+        .keys
+        .toList()
+
+    if (duplicateFieldIds.isNotEmpty()) {
+        throw ApiErrorException.BadRequestException(
+            "Invalid payload: answers.fieldId must be unique (duplicates: ${duplicateFieldIds.joinToString(",")})"
+        )
+    }
+
+    submission.answers.forEach { answer ->
+        when (val value = answer.value) {
+            is AnswerValue.Rating -> {
+                val variant = value.ratingVariant
+                    ?: throw ApiErrorException.BadRequestException("Invalid payload: ratingVariant is required for rating answers")
+                val scale = value.ratingScale
+                    ?: throw ApiErrorException.BadRequestException("Invalid payload: ratingScale is required for rating answers")
+
+                val expectedScale = RatingVariant.getScale(variant)
+                if (scale != expectedScale) {
+                    throw ApiErrorException.BadRequestException(
+                        "Invalid payload: ratingScale=$scale does not match ratingVariant=$variant (expected $expectedScale)"
+                    )
+                }
+
+                val (minRating, maxRating) = if (variant == RatingVariant.NPS) {
+                    0 to 10
+                } else {
+                    1 to scale
+                }
+
+                if (value.rating !in minRating..maxRating) {
+                    throw ApiErrorException.BadRequestException(
+                        "Invalid payload: rating=${value.rating} out of range for ratingVariant=$variant ($minRating-$maxRating)"
+                    )
+                }
+            }
+
+            is AnswerValue.Text -> {
+                // No extra validation (PII redaction happens before storage in repository)
+            }
+
+            is AnswerValue.SingleChoice -> {
+                if (value.selectedOptionId.isBlank()) {
+                    throw ApiErrorException.BadRequestException("Invalid payload: selectedOptionId must be non-blank")
+                }
+            }
+
+            is AnswerValue.MultiChoice -> {
+                if (value.selectedOptionIds.isEmpty()) {
+                    throw ApiErrorException.BadRequestException("Invalid payload: selectedOptionIds must be non-empty")
+                }
+            }
+
+            is AnswerValue.DateValue -> {
+                if (value.date.isBlank()) {
+                    throw ApiErrorException.BadRequestException("Invalid payload: date must be non-blank")
+                }
+            }
+        }
+    }
+}
+
+private suspend fun handleSubmissionV1(
+    call: io.ktor.server.application.ApplicationCall,
+    feedbackRepository: FeedbackRepository
+) {
     val identity = call.getCallerIdentity()
-    
     val body = call.receiveText()
-    
-    // Validate JSON structure
+
     val jsonElement = try {
-        json.parseToJsonElement(body)
+        strictJson.parseToJsonElement(body)
     } catch (e: Exception) {
-        log.warn("Invalid JSON in feedback submission from team=${identity.team}", e)
-        call.respond(HttpStatusCode.BadRequest, mapOf("error" to "Invalid JSON"))
-        return
+        log.warn("Invalid JSON in feedback submission from team=${identity.team} app=${identity.app}", e)
+        throw ApiErrorException.BadRequestException("Invalid JSON")
     }
-    
-    // Validate that feedbackId exists
-    val feedbackId = jsonElement.jsonObject["feedbackId"]?.jsonPrimitive?.content
-    if (feedbackId.isNullOrBlank()) {
-        call.respond(HttpStatusCode.BadRequest, mapOf("error" to "feedbackId is required"))
-        return
+
+    val submission = try {
+        strictJson.decodeFromJsonElement(FeedbackSubmissionV1.serializer(), jsonElement)
+    } catch (e: SerializationException) {
+        throw ApiErrorException.BadRequestException("Invalid payload")
     }
-    
+
+    validateSubmissionV1(submission)
+
     val id = feedbackRepository.save(
         feedbackJson = body,
         team = identity.team,
         app = identity.app
     )
-    
-    log.info("Saved feedback id=$id team=${identity.team} app=${identity.app} feedbackId=$feedbackId")
-    
-    if (returnId) {
-        call.respond(HttpStatusCode.Created, mapOf("id" to id))
-    } else {
-        call.respond(HttpStatusCode.Accepted)
-    }
-}
 
-private suspend fun handleUpdate(call: io.ktor.server.application.ApplicationCall) {
-    val id = call.parameters["id"] ?: run {
-        call.respond(HttpStatusCode.BadRequest, mapOf("error" to "Missing id"))
-        return
-    }
-    
-    // Get authenticated caller identity
-    val identity = call.getCallerIdentity()
-    
-    // Verify the record exists and get ownership info
-    val existing = feedbackRepository.findRawById(id)
-    if (existing == null) {
-        call.respond(HttpStatusCode.NotFound, mapOf("error" to "Feedback not found"))
-        return
-    }
-    
-    // Verify ownership - only the original team/app can update
-    val existingTeam = existing.team
-    val existingApp = existing.app
-    
-    if (existingTeam != identity.team || existingApp != identity.app) {
-        log.warn("Update rejected: team=${identity.team} app=${identity.app} tried to update record owned by team=$existingTeam app=$existingApp")
-        throw ApiErrorException.ForbiddenException("Cannot update feedback that belongs to another app")
-    }
-    
-    val body = call.receiveText()
-    feedbackRepository.update(id, body)
-    
-    log.info("Updated feedback id=$id team=${identity.team} app=${identity.app}")
-    call.respond(HttpStatusCode.OK)
+    log.info("Saved feedback id=$id team=${identity.team} app=${identity.app} surveyId=${submission.surveyId}")
+    call.respond(HttpStatusCode.Created, mapOf("id" to id))
 }

@@ -7,6 +7,9 @@ import no.nav.flexjar.integrations.valkey.StatsCache
 import no.nav.flexjar.integrations.valkey.ValkeyStatsCache
 import no.nav.flexjar.repository.FeedbackRepository
 import no.nav.flexjar.repository.FeedbackStatsRepository
+import no.nav.flexjar.repository.TextThemeRepository
+import java.net.URLEncoder
+import java.nio.charset.StandardCharsets
 import java.time.Duration
 import java.time.LocalDate
 import java.time.temporal.ChronoUnit
@@ -26,15 +29,60 @@ private val json = Json {
 class StatsService(
     private val feedbackRepository: FeedbackRepository = FeedbackRepository(),
     private val statsRepository: FeedbackStatsRepository = FeedbackStatsRepository(),
+    private val themeRepository: TextThemeRepository = TextThemeRepository(),
     private val statsCache: StatsCache = ValkeyStatsCache.fromEnvOrFallback(),
     private val cacheTtl: Duration = Duration.ofMinutes(5)
 ) {
+    private val overviewCacheTtl: Duration = Duration.ofMinutes(2)
+    private val ratingsCacheTtl: Duration = Duration.ofMinutes(2)
+    private val timelineCacheTtl: Duration = Duration.ofMinutes(2)
+    private val topTasksCacheTtl: Duration = Duration.ofMinutes(5)
+    private val surveyTypesCacheTtl: Duration = Duration.ofMinutes(10)
+    private val blockersCacheTtl: Duration = Duration.ofMinutes(5)
+
+    private fun StatsQuery.toCacheKey(): String {
+        fun enc(value: String): String = URLEncoder.encode(value, StandardCharsets.UTF_8)
+
+        val parts = listOf(
+            "team" to team,
+            "app" to app,
+            "fromDate" to fromDate,
+            "toDate" to toDate,
+            "surveyId" to surveyId,
+            "deviceType" to deviceType,
+            "task" to task
+        )
+            .filter { (_, value) -> value != null }
+            .map { (key, value) -> "${enc(key)}=${enc(value!!)}" }
+
+        return parts.joinToString("&")
+    }
+
+    private inline fun <reified T> getOrComputeCached(
+        prefix: String,
+        query: StatsQuery,
+        ttl: Duration,
+        crossinline compute: () -> T
+    ): T {
+        val cacheKey = "$prefix:${query.toCacheKey()}"
+
+        statsCache.get(cacheKey)?.let { cached ->
+            return try {
+                json.decodeFromString<T>(cached)
+            } catch (e: Exception) {
+                compute().also { statsCache.set(cacheKey, json.encodeToString(it), ttl) }
+            }
+        }
+
+        return compute().also { statsCache.set(cacheKey, json.encodeToString(it), ttl) }
+    }
+
     /**
      * Get comprehensive feedback statistics for the given query.
      * Results are cached for 5 minutes.
      */
     fun getStats(query: StatsQuery): FeedbackStats {
-        val cacheKey = "stats:${query.hashCode()}"
+        val cacheKey = query.toCacheKey()
         
         // Try cache first
         statsCache.get(cacheKey)?.let { cached ->
@@ -55,7 +103,7 @@ class StatsService(
         val stats = statsRepository.getStats(query)
         
         val averageRating = calculateAverageRating(stats.byRating)
-        val days = calculateDays(query.from, query.to)
+        val days = calculateDays(query.fromDate, query.toDate)
         
         // Build privacy info if data should be masked
         val privacy = if (stats.masked) {
@@ -73,11 +121,11 @@ class StatsService(
             byRating = if (stats.masked) emptyMap() else stats.byRating,
             byApp = if (stats.masked) emptyMap() else stats.byApp,
             byDate = if (stats.masked) emptyMap() else stats.byDate,
-            byFeedbackId = if (stats.masked) emptyMap() else stats.byFeedbackId,
+            bySurveyId = if (stats.masked) emptyMap() else stats.bySurveyId,
             averageRating = if (stats.masked) null else averageRating,
             period = StatsPeriod(
-                from = query.from,
-                to = query.to,
+                fromDate = query.fromDate,
+                toDate = query.toDate,
                 days = days
             ),
             surveyType = stats.surveyType?.let { 
@@ -88,43 +136,89 @@ class StatsService(
     }
 
     /**
+     * Get stats overview (new consolidated endpoint per GPT contract).
+     */
+    fun getStatsOverview(query: StatsQuery): StatsOverviewResponse {
+        return getOrComputeCached(prefix = "overview", query = query, ttl = overviewCacheTtl) {
+            val stats = statsRepository.getStats(query)
+
+            // Calculate low rating count (ratings 1-2)
+            val lowRatingCount = stats.byRating
+                .filter { (rating, _) -> rating.toIntOrNull()?.let { it <= 2 } ?: false }
+                .values.sum()
+
+            StatsOverviewResponse(
+                generatedAt = java.time.Instant.now().toString(),
+                range = if (query.fromDate != null || query.toDate != null) {
+                    DateRange(fromDate = query.fromDate, toDate = query.toDate)
+                } else null,
+                totals = StatsTotals(
+                    feedbackCount = stats.totalCount.toInt(),
+                    textCount = stats.countWithText.toInt(),
+                    lowRatingCount = lowRatingCount
+                ),
+                ratingDistribution = stats.byRating
+            )
+        }
+    }
+
+    /**
      * Get rating distribution for the given query.
      */
     fun getRatingDistribution(query: StatsQuery): RatingDistribution {
-        val stats = statsRepository.getStats(query)
-        
-        return RatingDistribution(
-            distribution = stats.byRating,
-            average = calculateAverageRating(stats.byRating),
-            total = stats.byRating.values.sum()
-        )
+        return getOrComputeCached(prefix = "ratings", query = query, ttl = ratingsCacheTtl) {
+            val stats = statsRepository.getStats(query)
+
+            RatingDistribution(
+                distribution = stats.byRating,
+                average = calculateAverageRating(stats.byRating),
+                total = stats.byRating.values.sum()
+            )
+        }
     }
 
     /**
      * Get timeline data for the given query.
      */
     fun getTimeline(query: StatsQuery): TimelineResponse {
-        val stats = statsRepository.getStats(query)
-        
-        return TimelineResponse(
-            data = stats.byDate.map { (date, count) ->
-                TimelineEntry(date = date, count = count)
-            }.sortedBy { it.date }
-        )
+        return getOrComputeCached(prefix = "timeline", query = query, ttl = timelineCacheTtl) {
+            val stats = statsRepository.getStats(query)
+
+            TimelineResponse(
+                data = stats.byDate.map { (date, count) ->
+                    TimelineEntry(date = date, count = count)
+                }.sortedBy { it.date }
+            )
+        }
     }
 
     /**
      * Get Top Tasks statistics for the given query.
      */
     fun getTopTasksStats(query: StatsQuery): TopTasksResponse {
-        return statsRepository.getTopTasksStats(query)
+        return getOrComputeCached(prefix = "topTasks", query = query, ttl = topTasksCacheTtl) {
+            statsRepository.getTopTasksStats(query)
+        }
     }
 
     /**
      * Get Survey Type distribution for the given query.
      */
     fun getSurveyTypeDistribution(query: StatsQuery): SurveyTypeDistribution {
-        return statsRepository.getSurveyTypeDistribution(query)
+        return getOrComputeCached(prefix = "surveyTypes", query = query, ttl = surveyTypesCacheTtl) {
+            statsRepository.getSurveyTypeDistribution(query)
+        }
+    }
+
+    /**
+     * Get blocker text analysis for Top Tasks (word frequency, themes, recent blockers).
+     * Uses themes where analysisContext = BLOCKER.
+     */
+    fun getBlockerStats(query: StatsQuery): BlockerStatsResponse {
+        return getOrComputeCached(prefix = "blockers", query = query, ttl = blockersCacheTtl) {
+            val themes = themeRepository.findByTeam(query.team, AnalysisContext.BLOCKER)
+            statsRepository.getBlockerStats(query, themes)
+        }
     }
 
     /**

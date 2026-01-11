@@ -110,16 +110,6 @@ class FeedbackRepository(
                 jsonObj["answers"] = kotlinx.serialization.json.JsonArray(redactedAnswers)
             }
             
-            // Redact legacy 'feedback' field if present
-            val feedbackText = jsonObj["feedback"]?.jsonPrimitive?.contentOrNull
-            if (feedbackText != null) {
-                val redacted = sensitiveDataFilter.redact(feedbackText)
-                if (redacted.wasRedacted) {
-                    jsonObj["feedback"] = kotlinx.serialization.json.JsonPrimitive(redacted.redactedText)
-                    log.info("Redacted sensitive data from legacy feedback field before storage")
-                }
-            }
-            
             Json.encodeToString(kotlinx.serialization.json.JsonObject.serializer(), kotlinx.serialization.json.JsonObject(jsonObj))
         } catch (e: Exception) {
             log.warn("Failed to redact feedback JSON, storing original", e)
@@ -254,6 +244,69 @@ class FeedbackRepository(
         }
     }
 
+    /**
+     * Find all tags for a specific team.
+     * Used by filter bootstrap endpoint.
+     */
+    fun findAllTags(team: String): Set<String> {
+        return transaction {
+             FeedbackTable.select(FeedbackTable.tags)
+                .where { 
+                    (FeedbackTable.team eq team) and 
+                    FeedbackTable.tags.isNotNull() and 
+                    (FeedbackTable.tags neq "") 
+                }
+                .withDistinct()
+                .mapNotNull { it[FeedbackTable.tags] }
+                .flatMap { it.split(",") }
+                .map { it.trim().lowercase() }
+                .filter { it.isNotBlank() }
+                .toSet()
+        }
+    }
+
+    /**
+     * Find all distinct apps for a specific team.
+     * Used by filter bootstrap endpoint.
+     */
+    fun findDistinctApps(team: String): List<String> {
+        return transaction {
+            FeedbackTable.select(FeedbackTable.app)
+                .where { (FeedbackTable.team eq team) and FeedbackTable.app.isNotNull() }
+                .withDistinct()
+                .mapNotNull { it[FeedbackTable.app] }
+        }
+    }
+
+    /**
+        * Find all surveys (surveyIds) grouped by app for a specific team.
+     * Used by filter bootstrap endpoint.
+     */
+    fun findSurveysByApp(team: String): Map<String, List<String>> {
+        return transaction {
+            val sql = """
+                SELECT DISTINCT 
+                    app,
+                    feedback_json::json->>'surveyId' as survey_id
+                FROM feedback
+                WHERE team = ?
+                  AND app IS NOT NULL
+                  AND feedback_json::json->>'surveyId' IS NOT NULL
+                ORDER BY app, survey_id
+            """.trimIndent()
+            
+            val result = mutableMapOf<String, MutableList<String>>()
+            exec(sql, listOf(VarCharColumnType() to team)) { rs ->
+                while (rs.next()) {
+                    val app = rs.getString("app") ?: continue
+                    val surveyId = rs.getString("survey_id") ?: continue
+                    result.getOrPut(app) { mutableListOf() }.add(surveyId)
+                }
+            }
+            result
+        }
+    }
+
     fun findAllTeamsAndApps(): Map<String, Set<String>> {
         return transaction {
              val result = mutableMapOf<String, MutableSet<String>>()
@@ -271,7 +324,7 @@ class FeedbackRepository(
         }
     }
     
-    fun findMetadataKeysForSurvey(feedbackId: String, team: String = "flex"): Map<String, Set<String>> {
+    fun findMetadataKeysForSurvey(surveyId: String, team: String = "flex"): Map<String, Set<String>> {
         return transaction {
             val sql = """
                 SELECT DISTINCT 
@@ -280,12 +333,12 @@ class FeedbackRepository(
                 FROM feedback,
                      jsonb_object_keys(feedback_json::jsonb->'metadata') as key
                 WHERE team = ?
-                  AND feedback_json::json->>'feedbackId' = ?
+                  AND feedback_json::json->>'surveyId' = ?
                   AND feedback_json::json->'metadata' IS NOT NULL
             """.trimIndent()
             
             val result = mutableMapOf<String, MutableSet<String>>()
-            exec(sql, listOf(VarCharColumnType() to team, VarCharColumnType() to feedbackId)) { rs ->
+            exec(sql, listOf(VarCharColumnType() to team, VarCharColumnType() to surveyId)) { rs ->
                 while (rs.next()) {
                     val key = rs.getString("metadata_key") ?: continue
                     val value = rs.getString("metadata_value") ?: continue
@@ -296,7 +349,7 @@ class FeedbackRepository(
         }
     }
 
-    fun findContextTagsForSurvey(feedbackId: String, team: String = "flex"): Map<String, List<MetadataValueWithCount>> {
+    fun findContextTagsForSurvey(surveyId: String, team: String = "flex"): Map<String, List<MetadataValueWithCount>> {
         return transaction {
             val sql = """
                 SELECT
@@ -306,13 +359,13 @@ class FeedbackRepository(
                 FROM feedback,
                      jsonb_object_keys(feedback_json::jsonb->'context'->'tags') as key
                 WHERE team = ?
-                  AND feedback_json::json->>'feedbackId' = ?
+                  AND feedback_json::json->>'surveyId' = ?
                   AND feedback_json::jsonb->'context'->'tags' IS NOT NULL
                 GROUP BY key, tag_value
             """.trimIndent()
 
             val result = mutableMapOf<String, MutableList<MetadataValueWithCount>>()
-            exec(sql, listOf(VarCharColumnType() to team, VarCharColumnType() to feedbackId)) { rs ->
+            exec(sql, listOf(VarCharColumnType() to team, VarCharColumnType() to surveyId)) { rs ->
                 while (rs.next()) {
                     val key = rs.getString("tag_key") ?: continue
                     val value = rs.getString("tag_value") ?: continue
@@ -332,45 +385,81 @@ class FeedbackRepository(
 
     
     private fun applyCommonFilters(query: Query, criteria: FeedbackQuery) {
-        if (criteria.medTekst) {
-             query.andWhere { JsonExtract(FeedbackTable.feedbackJson, listOf("feedback")).isNotNull() }
-             query.andWhere { JsonExtract(FeedbackTable.feedbackJson, listOf("feedback")) neq "" }
+        // Filter for feedback with text responses
+        if (criteria.hasText) {
+            query.andWhere {
+                JsonbPathExists(
+                    FeedbackTable.feedbackJson,
+                    "$.answers[*] ? (@.value.type == \"text\" && @.value.text != \"\")"
+                )
+            }
         }
         
-        if (criteria.stjerne) {
-             query.andWhere { FeedbackTable.tags like "%stjerne%" }
+        // Filter by survey ID
+        criteria.surveyId?.let { surveyId ->
+            query.andWhere { JsonExtract(FeedbackTable.feedbackJson, listOf("surveyId")) eq surveyId }
         }
         
-        criteria.feedbackId?.let { fid ->
-             query.andWhere { JsonExtract(FeedbackTable.feedbackJson, listOf("feedbackId")) eq fid }
+        // Date range filter - convert YYYY-MM-DD to UTC Instants (Europe/Oslo)
+        criteria.fromDate?.let { fromDate ->
+            try {
+                val localDate = java.time.LocalDate.parse(fromDate)
+                val startOfDay = localDate.atStartOfDay(java.time.ZoneId.of("Europe/Oslo")).toInstant()
+                query.andWhere { FeedbackTable.opprettet greaterEq startOfDay }
+            } catch (e: Exception) {
+                log.warn("Invalid fromDate format: $fromDate, expected YYYY-MM-DD")
+            }
         }
         
-        criteria.from?.let { from ->
-             query.andWhere { FeedbackTable.opprettet greaterEq Instant.parse(from) }
+        criteria.toDate?.let { toDate ->
+            try {
+                val localDate = java.time.LocalDate.parse(toDate)
+                // Inclusive date filter: < start of next day in Europe/Oslo
+                val nextDayStart = localDate.plusDays(1)
+                    .atStartOfDay(java.time.ZoneId.of("Europe/Oslo"))
+                    .toInstant()
+                query.andWhere { FeedbackTable.opprettet less nextDayStart }
+            } catch (e: Exception) {
+                log.warn("Invalid toDate format: $toDate, expected YYYY-MM-DD")
+            }
         }
         
-        criteria.to?.let { to ->
-             query.andWhere { FeedbackTable.opprettet lessEq Instant.parse(to) } 
+        // Filter for low ratings (1-2)
+        if (criteria.lowRating) {
+            val ratingText = JsonbPathQueryFirstText(
+                FeedbackTable.feedbackJson,
+                "$.answers[*] ? (@.value.type == \"rating\").value.rating"
+            )
+            val ratingExpr = Cast(ratingText, IntegerColumnType())
+            query.andWhere { ratingExpr lessEq 2 }
         }
         
-        if (criteria.lavRating) {
-             val ratingExpr = Cast(JsonExtract(FeedbackTable.feedbackJson, listOf("svar")), IntegerColumnType())
-             query.andWhere { ratingExpr lessEq 2 }
-        }
-        
+        // Device type filter
         criteria.deviceType?.let { device ->
-             query.andWhere { JsonExtract(FeedbackTable.feedbackJson, listOf("context", "deviceType")) eq device }
+            query.andWhere { JsonExtract(FeedbackTable.feedbackJson, listOf("context", "deviceType")) eq device }
         }
         
+        // Tags filter
         criteria.tags.forEach { tag ->
-             val escaped = tag.escapeLikePattern()
-             query.andWhere { FeedbackTable.tags like "%$escaped%" }
+            val escaped = tag.escapeLikePattern()
+            query.andWhere { FeedbackTable.tags like "%$escaped%" }
         }
         
-        criteria.fritekst.forEach { text ->
-             val escaped = text.escapeLikePattern()
-             val jsonText = JsonExtract(FeedbackTable.feedbackJson, listOf("feedback"))
-             query.andWhere { (jsonText like "%$escaped%") or (FeedbackTable.tags like "%$escaped%") }
+        // Full-text search query
+        criteria.query?.let { searchQuery ->
+            val escaped = searchQuery.escapeLikePattern()
+            query.andWhere { (FeedbackTable.feedbackJson like "%$escaped%") or (FeedbackTable.tags like "%$escaped%") }
+        }
+        
+        // Segment filter (context.tags)
+        criteria.segments.forEach { (key, value) ->
+            val safeKey = key.trim()
+            val safeValue = value.trim()
+            if (safeKey.isBlank() || safeValue.isBlank()) return@forEach
+            // Query JSONB context->tags->key = value
+            query.andWhere { 
+                JsonExtract(FeedbackTable.feedbackJson, listOf("context", "tags", safeKey)) eq safeValue 
+            }
         }
     }
 

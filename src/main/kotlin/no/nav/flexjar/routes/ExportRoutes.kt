@@ -27,18 +27,35 @@ fun Route.exportRoutes(exportService: ExportService = defaultExportService) {
             ExportFormat.CSV 
         }
         
+        // Parse tags (accept repeated params + comma-separated entries)
+        val tags = params.tag
+            ?.flatMap { it.split(",") }
+            ?.map { it.trim() }
+            ?.filter { it.isNotBlank() }
+            ?: emptyList()
+
+        // Parse segment params (format: "key:value")
+        val segments = params.segment
+            ?.mapNotNull { segmentStr ->
+                val parts = segmentStr.split(":", limit = 2)
+                if (parts.size == 2) Pair(parts[0], parts[1]) else null
+            }
+            ?: emptyList()
+
         val query = FeedbackQuery(
             team = team,
             app = params.app?.takeIf { it != FILTER_ALL },
             page = 0,
             size = ExportService.MAX_EXPORT_SIZE,
-            medTekst = params.medTekst ?: false,
-            stjerne = params.stjerne ?: false,
-            tags = params.tags?.split(",")?.filter { it.isNotBlank() } ?: emptyList(),
-            fritekst = params.fritekst?.split(" ")?.filter { it.isNotBlank() } ?: emptyList(),
-            from = params.from,
-            to = params.to,
-            feedbackId = params.feedbackId
+            hasText = params.hasText ?: false,
+            lowRating = params.lowRating ?: false,
+            tags = tags,
+            query = params.query?.takeIf { it.isNotBlank() },
+            fromDate = params.fromDate,
+            toDate = params.toDate,
+            surveyId = params.surveyId,
+            deviceType = params.deviceType?.takeIf { it.isNotBlank() },
+            segments = segments
         )
         
         val feedbacks = exportService.getFeedbackForExport(query)

@@ -161,7 +161,7 @@ data class MetadataValueWithCount(
 
 @Serializable
 data class ContextTagsResponse(
-    val feedbackId: String,
+    val surveyId: String,
     val contextTags: Map<String, List<MetadataValueWithCount>>,
     val maxCardinality: Int? = null
 )
@@ -203,18 +203,6 @@ data class FeedbackPage(
 )
 
 /**
- * Input for submitting new feedback (from widget)
- */
-@Serializable
-data class FeedbackInput(
-    val feedbackId: String,
-    val feedback: String? = null,
-    val svar: String? = null,
-    // Allow any additional fields
-    val extra: Map<String, String> = emptyMap()
-)
-
-/**
  * Input for adding a tag
  */
 @Serializable
@@ -244,7 +232,7 @@ data class FeedbackStats(
     val byRating: Map<String, Int>,
     val byApp: Map<String, Int>,
     val byDate: Map<String, Int>,
-    val byFeedbackId: Map<String, Int>,
+    val bySurveyId: Map<String, Int>,
     val averageRating: Double?,
     val period: StatsPeriod,
     val surveyType: SurveyType? = null,
@@ -295,8 +283,8 @@ data class FieldStatDetails(
 
 @Serializable
 data class StatsPeriod(
-    val from: String?,
-    val to: String?,
+    val fromDate: String?,
+    val toDate: String?,
     val days: Int
 )
 
@@ -309,34 +297,78 @@ data class TeamsAndApps(
 )
 
 /**
- * Query parameters for feedback list
+ * Query parameters for feedback list.
+ * 
+ * Note: fromDate/toDate are in YYYY-MM-DD format and interpreted as Europe/Oslo timezone.
+ * Backend converts to UTC Instant for database queries.
  */
 data class FeedbackQuery(
     val team: String = "flex",
     val app: String? = null,
     val page: Int? = null,
     val size: Int = 10,
-    val medTekst: Boolean = false,
-    val stjerne: Boolean = false,
+    /** Filter for feedback with text responses */
+    val hasText: Boolean = false,
+    /** Filter for low ratings (1-2) */
+    val lowRating: Boolean = false,
+    /** Tags to filter by */
     val tags: List<String> = emptyList(),
-    val fritekst: List<String> = emptyList(),
-    val from: String? = null,
-    val to: String? = null,
-    val feedbackId: String? = null,
-    val lavRating: Boolean = false,
-    val deviceType: String? = null
+    /** Full-text search query (searches in feedback text and tags) */
+    val query: String? = null,
+    /** Start date (YYYY-MM-DD, Europe/Oslo inclusive) */
+    val fromDate: String? = null,
+    /** End date (YYYY-MM-DD, Europe/Oslo inclusive) */
+    val toDate: String? = null,
+    /** Survey ID filter */
+    val surveyId: String? = null,
+    /** Device type filter */
+    val deviceType: String? = null,
+    /** Segment filters (context.tags) as key:value pairs */
+    val segments: List<Pair<String, String>> = emptyList()
 )
 
 /**
- * Query parameters for stats
+ * Query parameters for stats.
+ * 
+ * Note: fromDate/toDate are in YYYY-MM-DD format and interpreted as Europe/Oslo timezone.
  */
 data class StatsQuery(
     val team: String = "flex",
     val app: String? = null,
-    val from: String? = null,
-    val to: String? = null,
-    val feedbackId: String? = null,
-    val deviceType: String? = null
+    /** Start date (YYYY-MM-DD, Europe/Oslo inclusive) */
+    val fromDate: String? = null,
+    /** End date (YYYY-MM-DD, Europe/Oslo inclusive) */
+    val toDate: String? = null,
+    /** Survey ID filter */
+    val surveyId: String? = null,
+    /** Device type filter */
+    val deviceType: String? = null,
+    /** Task filter for Top Tasks drill-down */
+    val task: String? = null
+)
+
+/**
+ * Response for GET /api/v1/intern/stats/overview
+ */
+@Serializable
+data class StatsOverviewResponse(
+    val generatedAt: String,
+    val range: DateRange?,
+    val totals: StatsTotals,
+    val ratingDistribution: Map<String, Int>
+)
+
+@Serializable
+data class DateRange(
+    val fromDate: String?,
+    val toDate: String?
+)
+
+@Serializable
+data class StatsTotals(
+    val feedbackCount: Int,
+    val textCount: Int,
+    val lowRatingCount: Int
 )
 
 /**
@@ -349,7 +381,7 @@ data class FeedbackStatsResult(
     val byRating: Map<String, Int>,
     val byApp: Map<String, Int>,
     val byDate: Map<String, Int>,
-    val byFeedbackId: Map<String, Int>,
+    val bySurveyId: Map<String, Int>,
     // Privacy threshold
     val masked: Boolean = false,
     val threshold: Int = 5

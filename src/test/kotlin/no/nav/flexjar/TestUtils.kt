@@ -12,13 +12,17 @@ import no.nav.flexjar.config.auth.BrukerPrincipal
 import no.nav.flexjar.config.auth.TeamAuthorizationPlugin
 import no.nav.flexjar.config.configureSerialization
 import no.nav.flexjar.config.configureStatusPages
+import no.nav.flexjar.config.configureRateLimiting
 import no.nav.flexjar.config.DatabaseHolder
 import no.nav.flexjar.repository.FeedbackRepository
 import no.nav.flexjar.routes.feedbackRoutes
 import no.nav.flexjar.routes.internalRoutes
 import no.nav.flexjar.routes.statsRoutes
 import no.nav.flexjar.routes.exportRoutes
+import no.nav.flexjar.routes.surveyFacetRoutes
+import no.nav.flexjar.routes.submissionRoutes
 import no.nav.flexjar.repository.FeedbackStatsRepository
+import java.sql.Timestamp
 import no.nav.flexjar.service.StatsService
 import no.nav.flexjar.service.ExportService
 import java.time.OffsetDateTime
@@ -44,8 +48,10 @@ fun insertTestFeedback(
     id: String = UUID.randomUUID().toString(),
     team: String = "team-test",
     app: String = "app-test",
-    svar: Int = 4,
-    feedback: String = "Test feedback",
+    rating: Int = 4,
+    text: String = "Test feedback",
+    surveyId: String = "survey-$id",
+    surveyType: String = "rating",
     tags: String? = null,
     opprettet: OffsetDateTime = OffsetDateTime.now()
 ) {
@@ -58,20 +64,29 @@ fun insertTestFeedback(
             stmt.setObject(2, java.sql.Timestamp.from(opprettet.toInstant()))
             stmt.setString(3, """
                 {
-                    "feedbackId": "$id",
-                    "team": "$team",
-                    "app": "$app",
-                    "svar": $svar,
+                    "schemaVersion": 1,
+                    "surveyId": "$surveyId",
+                    "surveyType": "$surveyType",
                     "context": {
                         "pathname": "/test/path",
                         "deviceType": "desktop"
                     },
                     "answers": [
-                        {"questionId": "svar", "value": $svar, "questionPrompt": "Hvordan opplevde du tjenesten?"},
-                        {"questionId": "feedback", "value": "$feedback", "questionPrompt": "Har du tilbakemelding?"}
+                        {
+                          "fieldId": "svar",
+                          "fieldType": "RATING",
+                          "question": {"label": "Hvordan opplevde du tjenesten?"},
+                          "value": {"type": "rating", "rating": $rating, "ratingVariant": "emoji", "ratingScale": 5}
+                        },
+                        {
+                          "fieldId": "feedback",
+                          "fieldType": "TEXT",
+                          "question": {"label": "Har du tilbakemelding?"},
+                          "value": {"type": "text", "text": "$text"}
+                        }
                     ],
-                    "startedAt": "${opprettet.minusMinutes(1)}",
-                    "submittedAt": "$opprettet"
+                    "startedAt": "${opprettet.minusMinutes(1).toInstant()}",
+                    "submittedAt": "${opprettet.toInstant()}"
                 }
             """.trimIndent())
             stmt.setString(4, team)
@@ -81,6 +96,65 @@ fun insertTestFeedback(
         }
         conn.commit()
     }
+}
+
+fun insertTestFeedbackWithJson(
+    id: String = UUID.randomUUID().toString(),
+    team: String = "team-test",
+    app: String = "app-test",
+    feedbackJson: String,
+    tags: String? = null,
+    opprettet: OffsetDateTime = OffsetDateTime.now(),
+) {
+    TestDatabase.dataSource.connection.use { conn ->
+        conn.prepareStatement(
+            """
+            INSERT INTO feedback (id, opprettet, feedback_json, team, app, tags)
+            VALUES (?, ?, ?::jsonb, ?, ?, ?)
+            """.trimIndent()
+        ).use { stmt ->
+            stmt.setString(1, id)
+            stmt.setObject(2, Timestamp.from(opprettet.toInstant()))
+            stmt.setString(3, feedbackJson)
+            stmt.setString(4, team)
+            stmt.setString(5, app)
+            stmt.setString(6, tags)
+            stmt.executeUpdate()
+        }
+        conn.commit()
+    }
+}
+
+fun insertTestTheme(
+    team: String,
+    name: String,
+    keywords: List<String>,
+    color: String? = null,
+    priority: Int = 0,
+    analysisContext: String = "GENERAL_FEEDBACK",
+): String {
+    val id = UUID.randomUUID().toString()
+
+    TestDatabase.dataSource.connection.use { conn ->
+        conn.prepareStatement(
+            """
+            INSERT INTO text_theme (id, team, name, keywords, color, priority, analysis_context)
+            VALUES (?::uuid, ?, ?, ?, ?, ?, ?)
+            """.trimIndent()
+        ).use { stmt ->
+            stmt.setString(1, id)
+            stmt.setString(2, team)
+            stmt.setString(3, name)
+            stmt.setArray(4, conn.createArrayOf("text", keywords.toTypedArray()))
+            stmt.setString(5, color)
+            stmt.setInt(6, priority)
+            stmt.setString(7, analysisContext)
+            stmt.executeUpdate()
+        }
+        conn.commit()
+    }
+
+    return id
 }
 
 /**
@@ -96,6 +170,7 @@ fun Application.testModule(
     
     configureSerialization()
     configureStatusPages()
+    configureRateLimiting()
     install(io.ktor.server.resources.Resources)
     
     // Test auth that creates a BrukerPrincipal from any "Bearer" token
@@ -129,11 +204,16 @@ fun Application.testModule(
     
     routing {
         internalRoutes()
+
+        // Public submission API (local mode in tests)
+        submissionRoutes(feedbackRepository)
+
         authenticate("test-azure") {
             // Install TeamAuthorizationPlugin like production
             install(TeamAuthorizationPlugin)
             
             feedbackRoutes(feedbackRepository)
+            surveyFacetRoutes(feedbackRepository)
             statsRoutes(statsService)
             exportRoutes(exportService)
         }

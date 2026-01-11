@@ -15,6 +15,7 @@ object TextThemeTable : Table("text_theme") {
     val keywords = array<String>("keywords")
     val color = text("color").nullable()
     val priority = integer("priority").default(0)
+    val analysisContext = text("analysis_context")
     val createdAt = timestampWithTimeZone("created_at")
 
     override val primaryKey = PrimaryKey(id)

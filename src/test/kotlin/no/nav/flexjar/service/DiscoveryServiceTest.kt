@@ -54,9 +54,9 @@ class DiscoveryServiceTest : FunSpec({
 
     context("matchTheme") {
         val themes = listOf(
-            TextThemeDto("1", "team", "Sykepenger", listOf("sykemelding", "sykepenger", "syk"), priority = 10),
-            TextThemeDto("2", "team", "Utbetaling", listOf("utbetalt", "penger", "konto"), priority = 5),
-            TextThemeDto("3", "team", "Søknad", listOf("søknad", "søke", "status"), priority = 1)
+            TextThemeDto("1", "team", "Sykepenger", listOf("sykemelding", "sykepenger", "syk"), priority = 10, analysisContext = AnalysisContext.GENERAL_FEEDBACK),
+            TextThemeDto("2", "team", "Utbetaling", listOf("utbetalt", "penger", "konto"), priority = 5, analysisContext = AnalysisContext.GENERAL_FEEDBACK),
+            TextThemeDto("3", "team", "Søknad", listOf("søknad", "søke", "status"), priority = 1, analysisContext = AnalysisContext.GENERAL_FEEDBACK)
         )
 
         test("matches based on keyword") {
@@ -108,8 +108,8 @@ class DiscoveryServiceTest : FunSpec({
 
         test("groups by theme correctly") {
             val themes = listOf(
-                TextThemeDto("1", "team", "Sykepenger", listOf("sykepenger"), priority = 1),
-                TextThemeDto("2", "team", "Utbetaling", listOf("utbetaling"), priority = 1)
+                TextThemeDto("1", "team", "Sykepenger", listOf("sykepenger"), priority = 1, analysisContext = AnalysisContext.GENERAL_FEEDBACK),
+                TextThemeDto("2", "team", "Utbetaling", listOf("utbetaling"), priority = 1, analysisContext = AnalysisContext.GENERAL_FEEDBACK)
             )
             val feedbacks = listOf(
                 createDiscoveryFeedback("Sjekke sykepenger", "yes"),
