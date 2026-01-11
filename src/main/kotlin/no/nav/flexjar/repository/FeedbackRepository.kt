@@ -136,6 +136,21 @@ class FeedbackRepository {
         }
     }
 
+    /**
+     * Permanently delete all feedback items for a given surveyId and team.
+     *
+     * Note: surveyId is stored inside feedback_json, so we filter using JSON extraction.
+     * Returns number of deleted rows.
+     */
+    fun deleteSurvey(surveyId: String, team: String): Int {
+        return transaction {
+            FeedbackTable.deleteWhere {
+                (JsonExtract(FeedbackTable.feedbackJson, listOf("surveyId")) eq surveyId) and
+                    (FeedbackTable.team eq team)
+            }
+        }
+    }
+
     internal fun addTag(id: String, tag: String): Boolean {
         return transaction {
             val record = FeedbackTable.select(FeedbackTable.tags)

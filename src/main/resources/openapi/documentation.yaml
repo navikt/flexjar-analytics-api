@@ -136,8 +136,8 @@ paths:
           $ref: '#/components/responses/NotFound'
     delete:
       tags: [Analytics]
-      summary: Soft delete feedback
-      description: Clears feedback text (soft delete)
+      summary: Delete feedback permanently
+      description: Permanently removes the feedback item from the database.
       security:
         - azure: []
       parameters:
@@ -230,6 +230,37 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/TeamsAndApps'
+
+  /api/v1/intern/surveys/{surveyId}:
+    delete:
+      tags: [Analytics]
+      summary: Delete all feedback for a survey
+      description: Permanently removes all feedback items for the given surveyId within the authorized team.
+      security:
+        - azure: []
+      parameters:
+        - name: surveyId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Deleted survey result
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  surveyId:
+                    type: string
+                  deletedCount:
+                    type: integer
+                required: [surveyId, deletedCount]
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
 
   /api/v1/intern/stats:
     get:

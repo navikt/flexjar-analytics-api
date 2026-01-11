@@ -166,6 +166,12 @@ data class ContextTagsResponse(
     val maxCardinality: Int? = null
 )
 
+@Serializable
+data class DeleteSurveyResult(
+    val surveyId: String,
+    val deletedCount: Int
+)
+
 // ============================================
 // API Response Types
 // ============================================

@@ -12,6 +12,7 @@ import no.nav.flexjar.config.auth.authorizedTeam
 import no.nav.flexjar.domain.FeedbackPage
 import no.nav.flexjar.domain.FeedbackQuery
 import no.nav.flexjar.domain.ContextTagsResponse
+import no.nav.flexjar.domain.DeleteSurveyResult
 import no.nav.flexjar.domain.FILTER_ALL
 import no.nav.flexjar.domain.TagInput
 import no.nav.flexjar.domain.TeamsAndApps
@@ -166,6 +167,13 @@ fun Route.feedbackRoutes(service: FeedbackService = defaultFeedbackService) {
 }
 
 fun Route.surveyFacetRoutes(service: FeedbackService = defaultFeedbackService) {
+    // Delete all feedback for a survey (team-scoped)
+    delete<ApiV1Intern.Surveys.Id> { params ->
+        val team = call.authorizedTeam
+        val deletedCount = service.deleteSurvey(params.surveyId, team)
+        call.respond(DeleteSurveyResult(surveyId = params.surveyId, deletedCount = deletedCount))
+    }
+
     // Get all context tags and values with counts for a survey (filtered by cardinality)
     get<ApiV1Intern.Surveys.Id.ContextTags> { params ->
         val team = call.authorizedTeam

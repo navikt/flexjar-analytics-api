@@ -305,6 +305,109 @@ class FeedbackRoutesTest : FunSpec({
         }
     }
 
+    test("DELETE /api/v1/intern/surveys/{surveyId} deletes all feedback for survey and returns count") {
+        testApplication {
+            application { testModule() }
+
+            val surveyId = "survey-delete-1"
+
+            insertTestFeedbackWithJson(
+                team = "team-test",
+                app = "app-test",
+                feedbackJson = """
+                    {
+                      "surveyId": "$surveyId",
+                      "answers": [
+                        {"fieldId": "rating", "fieldType": "RATING", "question": {"label": "Hvordan?"}, "value": {"type": "rating", "rating": 4}}
+                      ]
+                    }
+                """.trimIndent(),
+            )
+            insertTestFeedbackWithJson(
+                team = "team-test",
+                app = "app-test",
+                feedbackJson = """
+                    {
+                      "surveyId": "$surveyId",
+                      "answers": [
+                        {"fieldId": "rating", "fieldType": "RATING", "question": {"label": "Hvordan?"}, "value": {"type": "rating", "rating": 5}}
+                      ]
+                    }
+                """.trimIndent(),
+            )
+
+            val response = createTestClient().delete("/api/v1/intern/surveys/$surveyId?team=team-test") {
+                header(HttpHeaders.Authorization, "Bearer test-token")
+            }
+
+            response.status shouldBe HttpStatusCode.OK
+            response.bodyAsText() shouldContain surveyId
+            response.bodyAsText() shouldContain "deletedCount"
+            response.bodyAsText() shouldContain "2"
+
+            // Ensure it's gone
+            val after = createTestClient().get("/api/v1/intern/feedback?surveyId=$surveyId&team=team-test") {
+                header(HttpHeaders.Authorization, "Bearer test-token")
+            }
+            after.status shouldBe HttpStatusCode.OK
+
+            val afterJson = Json.parseToJsonElement(after.bodyAsText()).jsonObject
+            afterJson["totalElements"].shouldNotBeNull().jsonPrimitive.int shouldBe 0
+        }
+    }
+
+    test("DELETE /api/v1/intern/surveys/{surveyId} does not delete another team's survey") {
+        testApplication {
+            application { testModule() }
+
+            val surveyId = "survey-delete-2"
+
+            insertTestFeedbackWithJson(
+                team = "another-team",
+                app = "app-test",
+                feedbackJson = """
+                    {
+                      "surveyId": "$surveyId",
+                      "answers": [
+                        {"fieldId": "rating", "fieldType": "RATING", "question": {"label": "Hvordan?"}, "value": {"type": "rating", "rating": 4}}
+                      ]
+                    }
+                """.trimIndent(),
+            )
+
+            val response = createTestClient().delete("/api/v1/intern/surveys/$surveyId?team=team-test") {
+                header(HttpHeaders.Authorization, "Bearer test-token")
+            }
+
+            response.status shouldBe HttpStatusCode.OK
+
+            val deleteJson = Json.parseToJsonElement(response.bodyAsText()).jsonObject
+            deleteJson["deletedCount"].shouldNotBeNull().jsonPrimitive.int shouldBe 0
+
+            // Still exists under the other team (verified directly in DB, since the test user is not authorized for another-team)
+            val remainingOtherTeamRows = TestDatabase.dataSource.connection.use { conn ->
+                conn.prepareStatement(
+                    """
+                    SELECT COUNT(*)
+                    FROM feedback
+                    WHERE team = ?
+                                            AND feedback_json::jsonb->>'surveyId' = ?
+                    """.trimIndent()
+                ).use { stmt ->
+                    stmt.setString(1, "another-team")
+                    stmt.setString(2, surveyId)
+
+                    stmt.executeQuery().use { rs ->
+                        rs.next()
+                        rs.getInt(1)
+                    }
+                }
+            }
+
+            remainingOtherTeamRows shouldBe 1
+        }
+    }
+
     test("GET /api/v1/intern/feedback/{id} parses nested context.viewport") {
         testApplication {
             application { testModule() }

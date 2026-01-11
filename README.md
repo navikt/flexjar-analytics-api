@@ -35,11 +35,12 @@ docker run -d --name flexjar-db \
 |----------|-------------|
 | `GET /api/v1/intern/feedback` | List feedback with filters |
 | `GET /api/v1/intern/feedback/{id}` | Get single feedback |
-| `DELETE /api/v1/intern/feedback/{id}` | Soft delete feedback |
+| `DELETE /api/v1/intern/feedback/{id}` | Delete feedback permanently |
 | `POST /api/v1/intern/feedback/{id}/tags` | Add tag |
 | `DELETE /api/v1/intern/feedback/{id}/tags?tag=X` | Remove tag |
 | `GET /api/v1/intern/feedback/tags` | List all tags |
 | `GET /api/v1/intern/feedback/teams` | List teams and apps |
+| `DELETE /api/v1/intern/surveys/{surveyId}` | Delete all feedback for a survey |
 | `GET /api/v1/intern/stats` | Get statistics |
 | `GET /api/v1/intern/stats/ratings` | Rating distribution |
 | `GET /api/v1/intern/stats/timeline` | Timeline data |
