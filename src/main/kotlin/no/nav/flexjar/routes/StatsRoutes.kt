@@ -20,14 +20,16 @@ private fun buildStatsQuery(
     fromDate: String?,
     toDate: String?,
     surveyId: String?,
-    deviceType: String?
+    deviceType: String?,
+    task: String? = null
 ) = StatsQuery(
     team = team,
     app = app?.takeIf { it != FILTER_ALL },
     fromDate = fromDate,
     toDate = toDate,
     surveyId = surveyId,
-    deviceType = deviceType?.takeIf { it != FILTER_ALL }
+    deviceType = deviceType?.takeIf { it != FILTER_ALL },
+    task = task
 )
 
 /**
@@ -81,8 +83,18 @@ fun Route.statsRoutes(
         val team = call.authorizedTeam
         val p = params.parent
 
-        val query = buildStatsQuery(team, p.app, p.fromDate, p.toDate, p.surveyId, p.deviceType)
+        val query = buildStatsQuery(team, p.app, p.fromDate, p.toDate, p.surveyId, p.deviceType, p.task)
         val stats = statsService.getTopTasksStats(query)
+        call.respond(stats)
+    }
+
+    // Get blocker statistics for Top Tasks (word frequency + theme clustering)
+    get<ApiV1Intern.Stats.Blockers> { params ->
+        val team = call.authorizedTeam
+        val p = params.parent
+
+        val query = buildStatsQuery(team, p.app, p.fromDate, p.toDate, p.surveyId, p.deviceType, p.task)
+        val stats = statsService.getBlockerStats(query)
         call.respond(stats)
     }
 

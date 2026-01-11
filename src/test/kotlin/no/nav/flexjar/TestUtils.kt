@@ -22,6 +22,7 @@ import no.nav.flexjar.routes.exportRoutes
 import no.nav.flexjar.routes.surveyFacetRoutes
 import no.nav.flexjar.routes.submissionRoutes
 import no.nav.flexjar.repository.FeedbackStatsRepository
+import java.sql.Timestamp
 import no.nav.flexjar.service.StatsService
 import no.nav.flexjar.service.ExportService
 import java.time.OffsetDateTime
@@ -95,6 +96,65 @@ fun insertTestFeedback(
         }
         conn.commit()
     }
+}
+
+fun insertTestFeedbackWithJson(
+    id: String = UUID.randomUUID().toString(),
+    team: String = "team-test",
+    app: String = "app-test",
+    feedbackJson: String,
+    tags: String? = null,
+    opprettet: OffsetDateTime = OffsetDateTime.now(),
+) {
+    TestDatabase.dataSource.connection.use { conn ->
+        conn.prepareStatement(
+            """
+            INSERT INTO feedback (id, opprettet, feedback_json, team, app, tags)
+            VALUES (?, ?, ?::jsonb, ?, ?, ?)
+            """.trimIndent()
+        ).use { stmt ->
+            stmt.setString(1, id)
+            stmt.setObject(2, Timestamp.from(opprettet.toInstant()))
+            stmt.setString(3, feedbackJson)
+            stmt.setString(4, team)
+            stmt.setString(5, app)
+            stmt.setString(6, tags)
+            stmt.executeUpdate()
+        }
+        conn.commit()
+    }
+}
+
+fun insertTestTheme(
+    team: String,
+    name: String,
+    keywords: List<String>,
+    color: String? = null,
+    priority: Int = 0,
+    analysisContext: String = "GENERAL_FEEDBACK",
+): String {
+    val id = UUID.randomUUID().toString()
+
+    TestDatabase.dataSource.connection.use { conn ->
+        conn.prepareStatement(
+            """
+            INSERT INTO text_theme (id, team, name, keywords, color, priority, analysis_context)
+            VALUES (?::uuid, ?, ?, ?, ?, ?, ?)
+            """.trimIndent()
+        ).use { stmt ->
+            stmt.setString(1, id)
+            stmt.setString(2, team)
+            stmt.setString(3, name)
+            stmt.setArray(4, conn.createArrayOf("text", keywords.toTypedArray()))
+            stmt.setString(5, color)
+            stmt.setInt(6, priority)
+            stmt.setString(7, analysisContext)
+            stmt.executeUpdate()
+        }
+        conn.commit()
+    }
+
+    return id
 }
 
 /**

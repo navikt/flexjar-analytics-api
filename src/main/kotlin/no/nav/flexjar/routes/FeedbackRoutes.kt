@@ -162,7 +162,7 @@ fun Route.surveyFacetRoutes(repository: FeedbackRepository = defaultFeedbackRepo
     get<ApiV1Intern.Surveys.Id.ContextTags> { params ->
         val team = call.authorizedTeam
 
-        val contextTags = repository.findContextTagsForSurvey(params.parent.surveyId, team)
+        val contextTags = repository.findContextTagsForSurvey(params.parent.surveyId, team, params.task)
 
         val maxCard = params.maxCardinality
         val filteredTags = if (maxCard != null) {

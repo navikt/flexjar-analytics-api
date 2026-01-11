@@ -342,7 +342,9 @@ data class StatsQuery(
     /** Survey ID filter */
     val surveyId: String? = null,
     /** Device type filter */
-    val deviceType: String? = null
+    val deviceType: String? = null,
+    /** Task filter for Top Tasks drill-down */
+    val task: String? = null
 )
 
 /**

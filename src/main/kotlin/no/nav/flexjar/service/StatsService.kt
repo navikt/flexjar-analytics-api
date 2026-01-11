@@ -7,6 +7,7 @@ import no.nav.flexjar.integrations.valkey.StatsCache
 import no.nav.flexjar.integrations.valkey.ValkeyStatsCache
 import no.nav.flexjar.repository.FeedbackRepository
 import no.nav.flexjar.repository.FeedbackStatsRepository
+import no.nav.flexjar.repository.TextThemeRepository
 import java.net.URLEncoder
 import java.nio.charset.StandardCharsets
 import java.time.Duration
@@ -28,6 +29,7 @@ private val json = Json {
 class StatsService(
     private val feedbackRepository: FeedbackRepository = FeedbackRepository(),
     private val statsRepository: FeedbackStatsRepository = FeedbackStatsRepository(),
+    private val themeRepository: TextThemeRepository = TextThemeRepository(),
     private val statsCache: StatsCache = ValkeyStatsCache.fromEnvOrFallback(),
     private val cacheTtl: Duration = Duration.ofMinutes(5)
 ) {
@@ -36,6 +38,7 @@ class StatsService(
     private val timelineCacheTtl: Duration = Duration.ofMinutes(2)
     private val topTasksCacheTtl: Duration = Duration.ofMinutes(5)
     private val surveyTypesCacheTtl: Duration = Duration.ofMinutes(10)
+    private val blockersCacheTtl: Duration = Duration.ofMinutes(5)
 
     private fun StatsQuery.toCacheKey(): String {
         fun enc(value: String): String = URLEncoder.encode(value, StandardCharsets.UTF_8)
@@ -46,7 +49,8 @@ class StatsService(
             "fromDate" to fromDate,
             "toDate" to toDate,
             "surveyId" to surveyId,
-            "deviceType" to deviceType
+            "deviceType" to deviceType,
+            "task" to task
         )
             .filter { (_, value) -> value != null }
             .map { (key, value) -> "${enc(key)}=${enc(value!!)}" }
@@ -203,6 +207,17 @@ class StatsService(
     fun getSurveyTypeDistribution(query: StatsQuery): SurveyTypeDistribution {
         return getOrComputeCached(prefix = "surveyTypes", query = query, ttl = surveyTypesCacheTtl) {
             statsRepository.getSurveyTypeDistribution(query)
+        }
+    }
+
+    /**
+     * Get blocker text analysis for Top Tasks (word frequency, themes, recent blockers).
+     * Uses themes where analysisContext = BLOCKER.
+     */
+    fun getBlockerStats(query: StatsQuery): BlockerStatsResponse {
+        return getOrComputeCached(prefix = "blockers", query = query, ttl = blockersCacheTtl) {
+            val themes = themeRepository.findByTeam(query.team, AnalysisContext.BLOCKER)
+            statsRepository.getBlockerStats(query, themes)
         }
     }
 

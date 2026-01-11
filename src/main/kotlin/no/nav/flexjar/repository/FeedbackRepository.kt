@@ -316,9 +316,7 @@ class FeedbackRepository(
                     val team = it[FeedbackTable.team]
                     val app = it[FeedbackTable.app]
                     result.getOrPut(team) { mutableSetOf() }
-                    if (app != null) {
-                        result[team]!!.add(app)
-                    }
+                    result[team]!!.add(app)
                 }
              result
         }
@@ -349,34 +347,76 @@ class FeedbackRepository(
         }
     }
 
-    fun findContextTagsForSurvey(surveyId: String, team: String = "flex"): Map<String, List<MetadataValueWithCount>> {
+    fun findContextTagsForSurvey(
+        surveyId: String,
+        team: String = "flex",
+        task: String? = null
+    ): Map<String, List<MetadataValueWithCount>> {
         return transaction {
-            val sql = """
-                SELECT
-                    key as tag_key,
-                    feedback_json::json->'context'->'tags'->>key as tag_value,
-                    COUNT(*) as tag_count
-                FROM feedback,
-                     jsonb_object_keys(feedback_json::jsonb->'context'->'tags') as key
-                WHERE team = ?
-                  AND feedback_json::json->>'surveyId' = ?
-                  AND feedback_json::jsonb->'context'->'tags' IS NOT NULL
-                GROUP BY key, tag_value
-            """.trimIndent()
+            if (task.isNullOrBlank()) {
+                val sql = """
+                    SELECT
+                        key as tag_key,
+                        feedback_json::json->'context'->'tags'->>key as tag_value,
+                        COUNT(*) as tag_count
+                    FROM feedback,
+                         jsonb_object_keys(feedback_json::jsonb->'context'->'tags') as key
+                    WHERE team = ?
+                      AND feedback_json::json->>'surveyId' = ?
+                      AND feedback_json::jsonb->'context'->'tags' IS NOT NULL
+                    GROUP BY key, tag_value
+                """.trimIndent()
 
-            val result = mutableMapOf<String, MutableList<MetadataValueWithCount>>()
-            exec(sql, listOf(VarCharColumnType() to team, VarCharColumnType() to surveyId)) { rs ->
-                while (rs.next()) {
-                    val key = rs.getString("tag_key") ?: continue
-                    val value = rs.getString("tag_value") ?: continue
-                    val count = rs.getInt("tag_count")
-                    result.getOrPut(key) { mutableListOf() }.add(MetadataValueWithCount(value = value, count = count))
+                val result = mutableMapOf<String, MutableList<MetadataValueWithCount>>()
+                exec(sql, listOf(VarCharColumnType() to team, VarCharColumnType() to surveyId)) { rs ->
+                    while (rs.next()) {
+                        val key = rs.getString("tag_key") ?: continue
+                        val value = rs.getString("tag_value") ?: continue
+                        val count = rs.getInt("tag_count")
+                        result.getOrPut(key) { mutableListOf() }
+                            .add(MetadataValueWithCount(value = value, count = count))
+                    }
+                }
+
+                // Keep stable order (desc by count, then value) for deterministic responses
+                return@transaction result.mapValues { (_, values) ->
+                    values.sortedWith(compareByDescending<MetadataValueWithCount> { it.count }.thenBy { it.value })
                 }
             }
 
-            // Keep stable order (desc by count, then value) for deterministic responses
-            result.mapValues { (_, values) ->
-                values.sortedWith(compareByDescending<MetadataValueWithCount> { it.count }.thenBy { it.value })
+            val dbQuery = FeedbackTable.selectAll()
+            dbQuery.andWhere { FeedbackTable.team eq team }
+            dbQuery.andWhere { JsonExtract(FeedbackTable.feedbackJson, listOf("surveyId")) eq surveyId }
+
+            val records = dbQuery.map { it.toDto() }
+
+            val taskFiltered = records.filter { feedback ->
+                val taskAnswer = feedback.answers.find { a ->
+                    a.fieldId in TopTasksFieldIds.task
+                }
+                if (taskAnswer != null && taskAnswer.fieldType == FieldType.SINGLE_CHOICE) {
+                    val selectedId = (taskAnswer.value as? AnswerValue.SingleChoice)?.selectedOptionId
+                    val option = taskAnswer.question.options?.find { it.id == selectedId }
+                    option?.label == task
+                } else {
+                    false
+                }
+            }
+
+            val counts = mutableMapOf<String, MutableMap<String, Int>>()
+            for (feedback in taskFiltered) {
+                val tags = feedback.context?.tags ?: continue
+                for ((key, value) in tags) {
+                    if (key.isBlank() || value.isBlank()) continue
+                    val perKey = counts.getOrPut(key) { mutableMapOf() }
+                    perKey[value] = (perKey[value] ?: 0) + 1
+                }
+            }
+
+            counts.mapValues { (_, valueCounts) ->
+                valueCounts.entries
+                    .map { (value, count) -> MetadataValueWithCount(value = value, count = count) }
+                    .sortedWith(compareByDescending<MetadataValueWithCount> { it.count }.thenBy { it.value })
             }
         }
     }

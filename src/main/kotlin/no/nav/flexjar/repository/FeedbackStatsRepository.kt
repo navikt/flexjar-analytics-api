@@ -2,6 +2,7 @@ package no.nav.flexjar.repository
 
 import kotlinx.serialization.json.*
 import no.nav.flexjar.domain.*
+import no.nav.flexjar.service.DiscoveryService
 import org.jetbrains.exposed.sql.*
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
 import org.jetbrains.exposed.sql.transactions.transaction
@@ -111,7 +112,22 @@ class FeedbackStatsRepository {
         return transaction {
             val dbQuery = FeedbackTable.selectAll()
             applyStatsFilters(dbQuery, query)
-            val records = dbQuery.map { it.toDto() }
+            var records = dbQuery.map { it.toDto() }
+            
+            // Task filter: filter by specific task name if provided
+            query.task?.let { taskFilter ->
+                records = records.filter { feedback ->
+                    val taskAnswer = feedback.answers.find { a -> 
+                        a.fieldId in TopTasksFieldIds.task
+                    }
+                    if (taskAnswer != null && taskAnswer.fieldType == FieldType.SINGLE_CHOICE) {
+                        val selectedId = (taskAnswer.value as? AnswerValue.SingleChoice)?.selectedOptionId
+                        val option = taskAnswer.question.options?.find { it.id == selectedId }
+                        option?.label == taskFilter
+                    } else false
+                }
+            }
+            
             processTopTasks(records)
         }
     }
@@ -144,6 +160,137 @@ class FeedbackStatsRepository {
             }.sortedByDescending { it.count }
             
             SurveyTypeDistribution(totalSurveys, distribution)
+        }
+    }
+
+    fun getBlockerStats(query: StatsQuery, themes: List<TextThemeDto>): BlockerStatsResponse {
+        return transaction {
+            val dbQuery = FeedbackTable.selectAll()
+            applyStatsFilters(dbQuery, query)
+            var records = dbQuery.map { it.toDto() }
+
+            records = records.filter { it.surveyType == SurveyType.TOP_TASKS }
+
+            // Extract blocker responses with optional task filter (matches option label)
+            val blockerResponses = mutableListOf<RecentBlockerResponse>()
+
+            for (feedback in records) {
+                val blockerAnswer = feedback.answers.find { a ->
+                    a.fieldId in TopTasksFieldIds.blocker
+                }
+                val blockerText = (blockerAnswer?.value as? AnswerValue.Text)?.text?.trim().orEmpty()
+                if (blockerText.isBlank()) continue
+
+                val taskAnswer = feedback.answers.find { a ->
+                    a.fieldId in TopTasksFieldIds.task
+                }
+
+                val taskLabel = when {
+                    taskAnswer != null && taskAnswer.fieldType == FieldType.SINGLE_CHOICE -> {
+                        val selectedId = (taskAnswer.value as? AnswerValue.SingleChoice)?.selectedOptionId
+                        val option = taskAnswer.question.options?.find { it.id == selectedId }
+                        option?.label ?: "Ukjent oppgave"
+                    }
+                    else -> "Ukjent oppgave"
+                }
+
+                if (query.task != null && taskLabel != query.task) continue
+
+                blockerResponses.add(
+                    RecentBlockerResponse(
+                        blocker = blockerText,
+                        task = taskLabel,
+                        submittedAt = feedback.submittedAt
+                    )
+                )
+            }
+
+            val wordData = mutableMapOf<String, WordAccumulator>()
+            for (response in blockerResponses) {
+                val words = extractWords(response.blocker)
+                val seenWordsInResponse = mutableSetOf<String>()
+                for (word in words) {
+                    val acc = wordData.getOrPut(word) { WordAccumulator() }
+                    acc.count++
+                    if (!seenWordsInResponse.contains(word) && acc.sourceResponses.size < 5) {
+                        acc.sourceResponses.add(BlockerSourceResponse(text = response.blocker, submittedAt = response.submittedAt))
+                        seenWordsInResponse.add(word)
+                    }
+                }
+            }
+
+            val wordFrequency = wordData.entries
+                .sortedByDescending { it.value.count }
+                .take(30)
+                .map { (word, acc) ->
+                    BlockerWordFrequencyEntry(
+                        word = word,
+                        count = acc.count,
+                        sourceResponses = acc.sourceResponses.toList()
+                    )
+                }
+
+            val themeAccumulators = themes.map { theme ->
+                ThemeAccumulator(
+                    theme = theme.name,
+                    themeId = theme.id,
+                    color = theme.color,
+                )
+            }.toMutableList()
+
+            val annetThemeId = "blocker-annet"
+            themeAccumulators.add(
+                ThemeAccumulator(
+                    theme = "Annet",
+                    themeId = annetThemeId,
+                    color = "var(--ax-text-neutral-subtle)",
+                )
+            )
+
+            for (response in blockerResponses) {
+                val blockerWordStems = extractWords(response.blocker).map { stemNorwegian(it) }
+                var matchedAny = false
+
+                for (acc in themeAccumulators) {
+                    if (acc.themeId == annetThemeId) continue
+
+                    val theme = themes.find { it.id == acc.themeId } ?: continue
+                    val keywordStems = theme.keywords.map { stemNorwegian(it.lowercase()) }
+                    if (keywordStems.any { it in blockerWordStems }) {
+                        acc.count++
+                        if (acc.examples.size < 3 && acc.usedExamples.add(response.blocker)) {
+                            acc.examples.add(response.blocker)
+                        }
+                        matchedAny = true
+                    }
+                }
+
+                if (!matchedAny) {
+                    val annet = themeAccumulators.find { it.themeId == annetThemeId }
+                    if (annet != null) {
+                        annet.count++
+                        if (annet.examples.size < 3 && annet.usedExamples.add(response.blocker)) {
+                            annet.examples.add(response.blocker)
+                        }
+                    }
+                }
+            }
+
+            val themeResults = themeAccumulators
+                .filter { it.count > 0 }
+                .sortedByDescending { it.count }
+                .map { it.toResult() }
+
+            val recentBlockers = blockerResponses
+                .sortedByDescending { parseSubmittedAt(it.submittedAt) }
+                .take(10)
+
+            BlockerStatsResponse(
+                totalBlockers = blockerResponses.size,
+                wordFrequency = wordFrequency,
+                themes = themeResults,
+                recentBlockers = recentBlockers
+            )
         }
     }
 
@@ -192,7 +339,70 @@ class FeedbackStatsRepository {
             query.andWhere { JsonExtract(FeedbackTable.feedbackJson, listOf("context", "deviceType")) eq device }
         }
     }
+
+    private fun extractWords(text: String): List<String> {
+        return text.lowercase()
+            .replace(Regex("[^a-zæøåA-ZÆØÅ0-9\\s]"), " ")
+            .split(Regex("\\s+"))
+            .filter { it.length > 2 && it !in DiscoveryService.STOP_WORDS }
+    }
+
+    private fun stemNorwegian(word: String): String {
+        var stem = word.lowercase().trim()
+
+        val suffixes = listOf(
+            "ene", "ane",
+            "en", "et", "a",
+            "er", "ar",
+            "te", "de",
+            "ere", "est"
+        )
+
+        for (suffix in suffixes) {
+            if (stem.length > suffix.length + 2 && stem.endsWith(suffix)) {
+                return stem.dropLast(suffix.length)
+            }
+        }
+
+        return stem
+    }
+
+    private fun parseSubmittedAt(value: String): Instant {
+        return try {
+            Instant.parse(value)
+        } catch (_: Exception) {
+            try {
+                OffsetDateTime.parse(value).toInstant()
+            } catch (_: Exception) {
+                Instant.EPOCH
+            }
+        }
+    }
     
+
+private class WordAccumulator(
+    var count: Int = 0,
+    val sourceResponses: MutableList<BlockerSourceResponse> = mutableListOf()
+)
+
+private class ThemeAccumulator(
+    val theme: String,
+    val themeId: String,
+    val color: String?,
+    val examples: MutableList<String> = mutableListOf(),
+    val usedExamples: MutableSet<String> = mutableSetOf(),
+    var count: Int = 0,
+) {
+    fun toResult(): BlockerThemeResult {
+        return BlockerThemeResult(
+            theme = theme,
+            themeId = themeId,
+            count = count,
+            examples = examples.toList(),
+            color = color,
+        )
+    }
+}
     // DTO methods removed - using Extensions.kt
 
     private fun processTopTasks(feedbacks: List<FeedbackDto>): TopTasksResponse {
