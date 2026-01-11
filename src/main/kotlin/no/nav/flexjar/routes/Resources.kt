@@ -71,6 +71,8 @@ class ApiV1Intern {
         val surveyId: String? = null,
         /** Device type filter */
         val deviceType: String? = null,
+        /** Segment filter - repeated params like segment=key:value */
+        val segment: List<String>? = null,
         /** Task filter for Top Tasks drill-down */
         val task: String? = null
     ) {
@@ -101,6 +103,10 @@ class ApiV1Intern {
         @Resource("discovery")
         @Serializable
         class Discovery(val parent: Stats)
+
+        @Resource("task-priority")
+        @Serializable
+        class TaskPriority(val parent: Stats)
     }
 
     @Resource("themes")

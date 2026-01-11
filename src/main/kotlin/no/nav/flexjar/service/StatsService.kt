@@ -39,9 +39,15 @@ class StatsService(
     private val topTasksCacheTtl: Duration = Duration.ofMinutes(5)
     private val surveyTypesCacheTtl: Duration = Duration.ofMinutes(10)
     private val blockersCacheTtl: Duration = Duration.ofMinutes(5)
+    private val taskPriorityCacheTtl: Duration = Duration.ofMinutes(5)
 
     private fun StatsQuery.toCacheKey(): String {
         fun enc(value: String): String = URLEncoder.encode(value, StandardCharsets.UTF_8)
+
+        val segmentValue = segments
+            .takeIf { it.isNotEmpty() }
+            ?.sortedBy { (k, v) -> "${k.trim()}:${v.trim()}" }
+            ?.joinToString(",") { (k, v) -> "${k.trim()}:${v.trim()}" }
 
         val parts = listOf(
             "team" to team,
@@ -50,6 +56,7 @@ class StatsService(
             "toDate" to toDate,
             "surveyId" to surveyId,
             "deviceType" to deviceType,
+            "segment" to segmentValue,
             "task" to task
         )
             .filter { (_, value) -> value != null }
@@ -218,6 +225,15 @@ class StatsService(
         return getOrComputeCached(prefix = "blockers", query = query, ttl = blockersCacheTtl) {
             val themes = themeRepository.findByTeam(query.team, AnalysisContext.BLOCKER)
             statsRepository.getBlockerStats(query, themes)
+        }
+    }
+
+    /**
+     * Get Task Priority statistics for the given query ("long neck" distribution).
+     */
+    fun getTaskPriorityStats(query: StatsQuery): TaskPriorityResponse {
+        return getOrComputeCached(prefix = "taskPriority", query = query, ttl = taskPriorityCacheTtl) {
+            statsRepository.getTaskPriorityStats(query)
         }
     }
 

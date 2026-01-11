@@ -163,6 +163,76 @@ class FeedbackStatsRepository {
         }
     }
 
+    fun getTaskPriorityStats(query: StatsQuery): TaskPriorityResponse {
+        return transaction {
+            val dbQuery = FeedbackTable.selectAll()
+            applyStatsFilters(dbQuery, query)
+            val records = dbQuery.map { it.toDto() }
+                .filter { it.surveyType == SurveyType.TASK_PRIORITY }
+
+            val voteCounts = mutableMapOf<String, Int>()
+            val taskLabels = mutableMapOf<String, String>()
+
+            for (feedback in records) {
+                val priorityAnswer = feedback.answers.find { a ->
+                    a.fieldId == "priority" && a.fieldType == FieldType.MULTI_CHOICE
+                } ?: continue
+
+                val selectedIds = (priorityAnswer.value as? AnswerValue.MultiChoice)?.selectedOptionIds.orEmpty()
+                if (selectedIds.isEmpty()) continue
+
+                // Cache labels
+                priorityAnswer.question.options?.forEach { opt ->
+                    taskLabels.putIfAbsent(opt.id, opt.label)
+                }
+
+                for (taskId in selectedIds) {
+                    voteCounts[taskId] = (voteCounts[taskId] ?: 0) + 1
+                }
+            }
+
+            val tasks = voteCounts.entries
+                .sortedByDescending { it.value }
+                .map { (taskId, votes) ->
+                    TaskVote(
+                        task = taskLabels[taskId] ?: taskId,
+                        votes = votes,
+                        percentage = 0
+                    )
+                }
+
+            val totalVotes = tasks.sumOf { it.votes }
+            val tasksWithPercentages = if (totalVotes > 0) {
+                tasks.map { it.copy(percentage = kotlin.math.round((it.votes.toDouble() / totalVotes) * 100.0).toInt()) }
+            } else tasks
+
+            // Find long neck cutoff (where cumulative percentage hits 80%)
+            var cumulative = 0
+            var longNeckCutoff = 0
+            for (i in tasksWithPercentages.indices) {
+                cumulative += tasksWithPercentages[i].percentage
+                if (cumulative >= 80) {
+                    longNeckCutoff = i + 1
+                    break
+                }
+            }
+            if (longNeckCutoff == 0) {
+                longNeckCutoff = tasksWithPercentages.size
+            }
+
+            val cumulativePercentageAt5 = tasksWithPercentages
+                .take(5)
+                .sumOf { it.percentage }
+
+            TaskPriorityResponse(
+                totalSubmissions = records.size,
+                tasks = tasksWithPercentages,
+                longNeckCutoff = longNeckCutoff,
+                cumulativePercentageAt5 = cumulativePercentageAt5,
+            )
+        }
+    }
+
     fun getBlockerStats(query: StatsQuery, themes: List<TextThemeDto>): BlockerStatsResponse {
         return transaction {
             val dbQuery = FeedbackTable.selectAll()
@@ -337,6 +407,16 @@ class FeedbackStatsRepository {
         // Device type filter
         criteria.deviceType?.let { device ->
             query.andWhere { JsonExtract(FeedbackTable.feedbackJson, listOf("context", "deviceType")) eq device }
+        }
+
+        // Segment filter (context.tags)
+        criteria.segments.forEach { (key, value) ->
+            val safeKey = key.trim()
+            val safeValue = value.trim()
+            if (safeKey.isBlank() || safeValue.isBlank()) return@forEach
+            query.andWhere {
+                JsonExtract(FeedbackTable.feedbackJson, listOf("context", "tags", safeKey)) eq safeValue
+            }
         }
     }
 

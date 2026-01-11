@@ -343,8 +343,30 @@ data class StatsQuery(
     val surveyId: String? = null,
     /** Device type filter */
     val deviceType: String? = null,
+    /** Segment filters (context.tags) as key:value pairs */
+    val segments: List<Pair<String, String>> = emptyList(),
     /** Task filter for Top Tasks drill-down */
     val task: String? = null
+)
+
+// ============================================
+// Task Priority Survey Types
+// ============================================
+
+@Serializable
+data class TaskVote(
+    val task: String,
+    val votes: Int,
+    val percentage: Int
+)
+
+@Serializable
+data class TaskPriorityResponse(
+    val totalSubmissions: Int,
+    val tasks: List<TaskVote>,
+    /** Index in tasks array where cumulative percentage hits 80% (the "long neck") */
+    val longNeckCutoff: Int,
+    val cumulativePercentageAt5: Int,
 )
 
 /**

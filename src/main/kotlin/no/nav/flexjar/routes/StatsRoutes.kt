@@ -21,6 +21,7 @@ private fun buildStatsQuery(
     toDate: String?,
     surveyId: String?,
     deviceType: String?,
+    segment: List<String>? = null,
     task: String? = null
 ) = StatsQuery(
     team = team,
@@ -29,6 +30,12 @@ private fun buildStatsQuery(
     toDate = toDate,
     surveyId = surveyId,
     deviceType = deviceType?.takeIf { it != FILTER_ALL },
+    segments = segment
+        ?.mapNotNull { segmentStr ->
+            val parts = segmentStr.split(":", limit = 2)
+            if (parts.size == 2) Pair(parts[0], parts[1]) else null
+        }
+        ?: emptyList(),
     task = task
 )
 
@@ -44,7 +51,7 @@ fun Route.statsRoutes(
         val team = call.authorizedTeam
         val p = params.parent
         
-        val query = buildStatsQuery(team, p.app, p.fromDate, p.toDate, p.surveyId, p.deviceType)
+        val query = buildStatsQuery(team, p.app, p.fromDate, p.toDate, p.surveyId, p.deviceType, p.segment)
         val overview = statsService.getStatsOverview(query)
         call.respond(overview)
     }
@@ -53,7 +60,7 @@ fun Route.statsRoutes(
     get<ApiV1Intern.Stats> { params ->
         val team = call.authorizedTeam
 
-        val query = buildStatsQuery(team, params.app, params.fromDate, params.toDate, params.surveyId, params.deviceType)
+        val query = buildStatsQuery(team, params.app, params.fromDate, params.toDate, params.surveyId, params.deviceType, params.segment)
         val stats = statsService.getStats(query)
         call.respond(stats)
     }
@@ -63,7 +70,7 @@ fun Route.statsRoutes(
         val team = call.authorizedTeam
         val p = params.parent
         
-        val query = buildStatsQuery(team, p.app, p.fromDate, p.toDate, p.surveyId, p.deviceType)
+        val query = buildStatsQuery(team, p.app, p.fromDate, p.toDate, p.surveyId, p.deviceType, p.segment)
         val distribution = statsService.getRatingDistribution(query)
         call.respond(distribution)
     }
@@ -73,7 +80,7 @@ fun Route.statsRoutes(
         val team = call.authorizedTeam
         val p = params.parent
 
-        val query = buildStatsQuery(team, p.app, p.fromDate, p.toDate, p.surveyId, p.deviceType)
+        val query = buildStatsQuery(team, p.app, p.fromDate, p.toDate, p.surveyId, p.deviceType, p.segment)
         val timeline = statsService.getTimeline(query)
         call.respond(timeline)
     }
@@ -83,7 +90,7 @@ fun Route.statsRoutes(
         val team = call.authorizedTeam
         val p = params.parent
 
-        val query = buildStatsQuery(team, p.app, p.fromDate, p.toDate, p.surveyId, p.deviceType, p.task)
+        val query = buildStatsQuery(team, p.app, p.fromDate, p.toDate, p.surveyId, p.deviceType, p.segment, p.task)
         val stats = statsService.getTopTasksStats(query)
         call.respond(stats)
     }
@@ -93,8 +100,18 @@ fun Route.statsRoutes(
         val team = call.authorizedTeam
         val p = params.parent
 
-        val query = buildStatsQuery(team, p.app, p.fromDate, p.toDate, p.surveyId, p.deviceType, p.task)
+        val query = buildStatsQuery(team, p.app, p.fromDate, p.toDate, p.surveyId, p.deviceType, p.segment, p.task)
         val stats = statsService.getBlockerStats(query)
+        call.respond(stats)
+    }
+
+    // Get Task Priority statistics ("long neck" distribution)
+    get<ApiV1Intern.Stats.TaskPriority> { params ->
+        val team = call.authorizedTeam
+        val p = params.parent
+
+        val query = buildStatsQuery(team, p.app, p.fromDate, p.toDate, p.surveyId, p.deviceType, p.segment)
+        val stats = statsService.getTaskPriorityStats(query)
         call.respond(stats)
     }
 
@@ -103,7 +120,7 @@ fun Route.statsRoutes(
         val team = call.authorizedTeam
         val p = params.parent
 
-        val query = buildStatsQuery(team, p.app, p.fromDate, p.toDate, null, p.deviceType)
+        val query = buildStatsQuery(team, p.app, p.fromDate, p.toDate, null, p.deviceType, p.segment)
         val distribution = statsService.getSurveyTypeDistribution(query)
         call.respond(distribution)
     }
