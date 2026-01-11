@@ -27,15 +27,21 @@ fun String.escapeLikePattern(): String {
         .replace("_", "\\_")
 }
 
-class FeedbackRepository(
-    private val sensitiveDataFilter: SensitiveDataFilter = SensitiveDataFilter.DEFAULT
-) {
+class FeedbackRepository {
     private val log = LoggerFactory.getLogger(FeedbackRepository::class.java)
     private val json = Json { ignoreUnknownKeys = true }
 
     fun findById(id: String): FeedbackDto? {
         return transaction {
             FeedbackTable.selectAll().where { FeedbackTable.id eq id }
+                .singleOrNull()
+                ?.toDto()
+        }
+    }
+
+    fun findById(id: String, team: String): FeedbackDto? {
+        return transaction {
+            FeedbackTable.selectAll().where { (FeedbackTable.id eq id) and (FeedbackTable.team eq team) }
                 .singleOrNull()
                 ?.toDto()
         }
@@ -62,59 +68,36 @@ class FeedbackRepository(
         }
     }
 
+    fun findRawById(id: String, team: String): FeedbackDbRecord? {
+        return transaction {
+            FeedbackTable.selectAll().where { (FeedbackTable.id eq id) and (FeedbackTable.team eq team) }
+                .singleOrNull()
+                ?.let {
+                    FeedbackDbRecord(
+                        id = it[FeedbackTable.id],
+                        opprettet = OffsetDateTime.ofInstant(it[FeedbackTable.opprettet], java.time.ZoneOffset.UTC),
+                        feedbackJson = it[FeedbackTable.feedbackJson],
+                        team = it[FeedbackTable.team],
+                        app = it[FeedbackTable.app],
+                        tags = it[FeedbackTable.tags]
+                    )
+                }
+        }
+    }
+
     fun save(feedbackJson: String, team: String, app: String): String {
         val id = UUID.randomUUID().toString()
-        
-        // Redact sensitive data BEFORE storing to database
-        val sanitizedJson = redactFeedbackJson(feedbackJson)
         
         transaction {
             FeedbackTable.insert {
                 it[FeedbackTable.id] = id
                 it[FeedbackTable.opprettet] = Instant.now()
-                it[FeedbackTable.feedbackJson] = sanitizedJson
+                it[FeedbackTable.feedbackJson] = feedbackJson
                 it[FeedbackTable.team] = team
                 it[FeedbackTable.app] = app
             }
         }
         return id
-    }
-    
-    /**
-     * Redact sensitive data from feedback JSON before storage.
-     * Returns sanitized JSON with PII replaced.
-     */
-    private fun redactFeedbackJson(feedbackJson: String): String {
-        return try {
-            val jsonElement = json.parseToJsonElement(feedbackJson)
-            val jsonObj = jsonElement.jsonObject.toMutableMap()
-            
-            // Redact answers array if present
-            val answers = jsonObj["answers"] as? kotlinx.serialization.json.JsonArray
-            if (answers != null) {
-                val redactedAnswers = answers.map { answerEl ->
-                    val answerObj = answerEl.jsonObject.toMutableMap()
-                    val valueObj = answerObj["value"]?.jsonObject?.toMutableMap()
-                    
-                    if (valueObj != null && valueObj["type"]?.jsonPrimitive?.content == "text") {
-                        val originalText = valueObj["text"]?.jsonPrimitive?.content ?: ""
-                        val redacted = sensitiveDataFilter.redact(originalText)
-                        if (redacted.wasRedacted) {
-                            valueObj["text"] = kotlinx.serialization.json.JsonPrimitive(redacted.redactedText)
-                            answerObj["value"] = kotlinx.serialization.json.JsonObject(valueObj)
-                            log.info("Redacted sensitive data from answer before storage: ${redacted.matchedPatterns}")
-                        }
-                    }
-                    kotlinx.serialization.json.JsonObject(answerObj)
-                }
-                jsonObj["answers"] = kotlinx.serialization.json.JsonArray(redactedAnswers)
-            }
-            
-            Json.encodeToString(kotlinx.serialization.json.JsonObject.serializer(), kotlinx.serialization.json.JsonObject(jsonObj))
-        } catch (e: Exception) {
-            log.warn("Failed to redact feedback JSON, storing original", e)
-            feedbackJson
-        }
     }
 
     fun update(id: String, feedbackJson: String): Boolean {
@@ -125,35 +108,18 @@ class FeedbackRepository(
         }
     }
 
-    fun softDelete(id: String): Boolean {
+    fun updateJson(id: String, feedbackJson: String): Boolean {
         return transaction {
-            val record = FeedbackTable.selectAll().where { FeedbackTable.id eq id }.singleOrNull() ?: return@transaction false
-            
-            val existingJson = record[FeedbackTable.feedbackJson]
-            
-            val jsonObj = try {
-                json.parseToJsonElement(existingJson).jsonObject
-            } catch (e: Exception) {
-                return@transaction false
-            }
-            
-            val answers = jsonObj["answers"] as? kotlinx.serialization.json.JsonArray ?: return@transaction false
-            val filteredAnswers = answers.mapNotNull { answerEl ->
-                val answerObj = answerEl.jsonObject
-                val fieldType = answerObj["fieldType"]?.jsonPrimitive?.content
-                if (fieldType == "TEXT") null else answerEl
-            }
-            
-            val newJsonObj = jsonObj.toMutableMap()
-            newJsonObj["answers"] = kotlinx.serialization.json.JsonArray(filteredAnswers)
-            
-            val newJson = Json.encodeToString(
-                kotlinx.serialization.json.JsonObject.serializer(),
-                kotlinx.serialization.json.JsonObject(newJsonObj)
-            )
-            
             FeedbackTable.update({ FeedbackTable.id eq id }) {
-                it[FeedbackTable.feedbackJson] = newJson
+                it[FeedbackTable.feedbackJson] = feedbackJson
+            } > 0
+        }
+    }
+
+    fun updateJson(id: String, team: String, feedbackJson: String): Boolean {
+        return transaction {
+            FeedbackTable.update({ (FeedbackTable.id eq id) and (FeedbackTable.team eq team) }) {
+                it[FeedbackTable.feedbackJson] = feedbackJson
             } > 0
         }
     }
@@ -179,6 +145,28 @@ class FeedbackRepository(
             } > 0
         }
     }
+
+    fun addTag(id: String, team: String, tag: String): Boolean {
+        return transaction {
+            val record = FeedbackTable.select(FeedbackTable.tags)
+                .where { (FeedbackTable.id eq id) and (FeedbackTable.team eq team) }
+                .singleOrNull()
+                ?: return@transaction false
+
+            val currentTags = record[FeedbackTable.tags]
+                ?.split(",")
+                ?.filter { it.isNotBlank() }
+                ?.map { it.trim().lowercase() }
+                ?.toSet()
+                ?: emptySet()
+
+            val newTags = currentTags + tag.lowercase()
+
+            FeedbackTable.update({ (FeedbackTable.id eq id) and (FeedbackTable.team eq team) }) {
+                it[FeedbackTable.tags] = newTags.joinToString(",")
+            } > 0
+        }
+    }
     
     fun removeTag(id: String, tag: String): Boolean {
         return transaction {
@@ -198,6 +186,29 @@ class FeedbackRepository(
             val tagsStr = if (newTags.isEmpty()) null else newTags.joinToString(",")
             
             FeedbackTable.update({ FeedbackTable.id eq id }) {
+                it[FeedbackTable.tags] = tagsStr
+            } > 0
+        }
+    }
+
+    fun removeTag(id: String, team: String, tag: String): Boolean {
+        return transaction {
+            val record = FeedbackTable.select(FeedbackTable.tags)
+                .where { (FeedbackTable.id eq id) and (FeedbackTable.team eq team) }
+                .singleOrNull()
+                ?: return@transaction false
+
+            val currentTags = record[FeedbackTable.tags]
+                ?.split(",")
+                ?.filter { it.isNotBlank() }
+                ?.map { it.trim().lowercase() }
+                ?.toSet()
+                ?: emptySet()
+
+            val newTags = currentTags - tag.lowercase()
+            val tagsStr = if (newTags.isEmpty()) null else newTags.joinToString(",")
+
+            FeedbackTable.update({ (FeedbackTable.id eq id) and (FeedbackTable.team eq team) }) {
                 it[FeedbackTable.tags] = tagsStr
             } > 0
         }

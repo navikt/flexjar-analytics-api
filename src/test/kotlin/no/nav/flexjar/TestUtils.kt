@@ -23,6 +23,7 @@ import no.nav.flexjar.routes.surveyFacetRoutes
 import no.nav.flexjar.routes.submissionRoutes
 import no.nav.flexjar.repository.FeedbackStatsRepository
 import java.sql.Timestamp
+import no.nav.flexjar.service.FeedbackService
 import no.nav.flexjar.service.StatsService
 import no.nav.flexjar.service.ExportService
 import java.time.OffsetDateTime
@@ -161,7 +162,7 @@ fun insertTestTheme(
  * Test application module with authentication bypassed
  */
 fun Application.testModule(
-    feedbackRepository: FeedbackRepository = FeedbackRepository(),
+    feedbackService: FeedbackService = FeedbackService(),
     statsRepository: FeedbackStatsRepository = FeedbackStatsRepository()
 ) {
     // Initialize test database
@@ -198,22 +199,22 @@ fun Application.testModule(
         }
     }
     
-    // Create services with the injected repositories
-    val statsService = StatsService(feedbackRepository, statsRepository)
-    val exportService = ExportService(feedbackRepository)
+    // Create services with the injected repositories/services
+    val statsService = StatsService(FeedbackRepository(), statsRepository)
+    val exportService = ExportService(FeedbackRepository())
     
     routing {
         internalRoutes()
 
         // Public submission API (local mode in tests)
-        submissionRoutes(feedbackRepository)
+        submissionRoutes(feedbackService)
 
         authenticate("test-azure") {
             // Install TeamAuthorizationPlugin like production
             install(TeamAuthorizationPlugin)
             
-            feedbackRoutes(feedbackRepository)
-            surveyFacetRoutes(feedbackRepository)
+            feedbackRoutes(feedbackService)
+            surveyFacetRoutes(feedbackService)
             statsRoutes(statsService)
             exportRoutes(exportService)
         }

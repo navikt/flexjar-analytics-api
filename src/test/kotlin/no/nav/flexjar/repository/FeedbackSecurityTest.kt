@@ -5,6 +5,7 @@ import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldContain
 import io.kotest.matchers.string.shouldNotContain
 import no.nav.flexjar.TestDatabase
+import no.nav.flexjar.service.FeedbackService
 
 class FeedbackSecurityTest : DescribeSpec({
 
@@ -78,6 +79,7 @@ class FeedbackSecurityTest : DescribeSpec({
     }
 
     describe("redactFeedbackJson - integration") {
+        val service = FeedbackService()
         val repository = FeedbackRepository()
         
         it("should redact fødselsnummer from answers") {
@@ -96,7 +98,7 @@ class FeedbackSecurityTest : DescribeSpec({
                 }
             """.trimIndent()
             
-            val saved = repository.save(feedbackJson, "team-test", "test-app")
+            val saved = service.save(feedbackJson, "team-test", "test-app")
             val retrieved = repository.findRawById(saved)
             
             retrieved?.feedbackJson shouldNotContain "12345678901"
@@ -118,7 +120,7 @@ class FeedbackSecurityTest : DescribeSpec({
                 }
             """.trimIndent()
             
-            val saved = repository.save(feedbackJson, "team-test", "test-app")
+            val saved = service.save(feedbackJson, "team-test", "test-app")
             val retrieved = repository.findRawById(saved)
             
             retrieved?.feedbackJson shouldNotContain "test.user@example.com"
@@ -141,10 +143,11 @@ class FeedbackSecurityTest : DescribeSpec({
                 }
             """.trimIndent()
             
-            val saved = repository.save(feedbackJson, "team-test", "test-app")
+            val saved = service.save(feedbackJson, "team-test", "test-app")
             val retrieved = repository.findRawById(saved)
             
             retrieved?.feedbackJson shouldNotContain "98765432"
+            retrieved?.feedbackJson shouldContain "[TELEFON FJERNET]"
         }
         
         it("should preserve non-text answers") {
@@ -163,7 +166,7 @@ class FeedbackSecurityTest : DescribeSpec({
                 }
             """.trimIndent()
             
-            val saved = repository.save(feedbackJson, "team-test", "test-app")
+            val saved = service.save(feedbackJson, "team-test", "test-app")
             val retrieved = repository.findRawById(saved)
             
             retrieved?.feedbackJson shouldContain "\"rating\":5"

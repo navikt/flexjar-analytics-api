@@ -119,14 +119,29 @@ class FeedbackRoutesTest : FunSpec({
             application { testModule() }
             
             val id = UUID.randomUUID().toString()
-            insertTestFeedback(id = id, team = "flex")
+            insertTestFeedback(id = id, team = "team-test")
             
-            val response = createTestClient().get("/api/v1/intern/feedback/$id") {
+            val response = createTestClient().get("/api/v1/intern/feedback/$id?team=team-test") {
                 header(HttpHeaders.Authorization, "Bearer test-token")
             }
             
             response.status shouldBe HttpStatusCode.OK
             response.bodyAsText() shouldContain id
+        }
+    }
+
+    test("GET /api/v1/intern/feedback/{id} returns 404 for feedback from another team") {
+        testApplication {
+            application { testModule() }
+
+            val id = UUID.randomUUID().toString()
+            insertTestFeedback(id = id, team = "another-team")
+
+            val response = createTestClient().get("/api/v1/intern/feedback/$id?team=team-test") {
+                header(HttpHeaders.Authorization, "Bearer test-token")
+            }
+
+            response.status shouldBe HttpStatusCode.NotFound
         }
     }
 
@@ -154,20 +169,52 @@ class FeedbackRoutesTest : FunSpec({
         }
     }
 
+    test("DELETE /api/v1/intern/feedback/{id} returns 404 for feedback from another team") {
+        testApplication {
+            application { testModule() }
+
+            val id = UUID.randomUUID().toString()
+            insertTestFeedback(id = id, team = "another-team")
+
+            val response = createTestClient().delete("/api/v1/intern/feedback/$id?team=team-test") {
+                header(HttpHeaders.Authorization, "Bearer test-token")
+            }
+
+            response.status shouldBe HttpStatusCode.NotFound
+        }
+    }
+
     test("POST /api/v1/intern/feedback/{id}/tags adds tag to feedback") {
         testApplication {
             application { testModule() }
             
             val id = UUID.randomUUID().toString()
-            insertTestFeedback(id = id)
+            insertTestFeedback(id = id, team = "team-test")
             
-            val response = createTestClient().post("/api/v1/intern/feedback/$id/tags") {
+            val response = createTestClient().post("/api/v1/intern/feedback/$id/tags?team=team-test") {
                 header(HttpHeaders.Authorization, "Bearer test-token")
                 contentType(ContentType.Application.Json)
                 setBody("""{"tag": "test-tag"}""")
             }
             
             response.status shouldBe HttpStatusCode.Created
+        }
+    }
+
+    test("POST /api/v1/intern/feedback/{id}/tags returns 404 for feedback from another team") {
+        testApplication {
+            application { testModule() }
+
+            val id = UUID.randomUUID().toString()
+            insertTestFeedback(id = id, team = "another-team")
+
+            val response = createTestClient().post("/api/v1/intern/feedback/$id/tags?team=team-test") {
+                header(HttpHeaders.Authorization, "Bearer test-token")
+                contentType(ContentType.Application.Json)
+                setBody("""{"tag": "test-tag"}""")
+            }
+
+            response.status shouldBe HttpStatusCode.NotFound
         }
     }
 
@@ -278,7 +325,7 @@ class FeedbackRoutesTest : FunSpec({
                 """.trimIndent(),
             )
 
-            val response = createTestClient().get("/api/v1/intern/feedback/$rowId") {
+            val response = createTestClient().get("/api/v1/intern/feedback/$rowId?team=team-test") {
                 header(HttpHeaders.Authorization, "Bearer test-token")
             }
 

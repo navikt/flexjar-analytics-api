@@ -15,11 +15,12 @@ import no.nav.flexjar.config.exception.ApiErrorException
 import no.nav.flexjar.domain.AnswerValue
 import no.nav.flexjar.domain.FeedbackSubmissionV1
 import no.nav.flexjar.domain.RatingVariant
-import no.nav.flexjar.repository.FeedbackRepository
+import no.nav.flexjar.service.FeedbackService
 import org.slf4j.LoggerFactory
 import java.time.Instant
 
 private val log = LoggerFactory.getLogger("SubmissionRoutes")
+private val defaultFeedbackService = FeedbackService()
 
 private val strictJson = Json {
     ignoreUnknownKeys = false
@@ -36,7 +37,7 @@ private val strictJson = Json {
  * 
  * Rate limited to 100 requests per minute per calling application.
  */
-fun Route.submissionRoutes(feedbackRepository: FeedbackRepository = FeedbackRepository()) {
+fun Route.submissionRoutes(feedbackService: FeedbackService = defaultFeedbackService) {
     rateLimit(SubmissionRateLimit) {
         route("/api") {
             // Install authentication plugin for all submission routes
@@ -44,7 +45,7 @@ fun Route.submissionRoutes(feedbackRepository: FeedbackRepository = FeedbackRepo
 
             // Canonical submission endpoint (schemaVersion=1)
             post("/v1/feedback") {
-                handleSubmissionV1(call, feedbackRepository)
+                handleSubmissionV1(call, feedbackService)
             }
         }
     }
@@ -114,7 +115,7 @@ private fun validateSubmissionV1(submission: FeedbackSubmissionV1) {
             }
 
             is AnswerValue.Text -> {
-                // No extra validation (PII redaction happens before storage in repository)
+                // No extra validation (PII redaction happens before storage)
             }
 
             is AnswerValue.SingleChoice -> {
@@ -140,7 +141,7 @@ private fun validateSubmissionV1(submission: FeedbackSubmissionV1) {
 
 private suspend fun handleSubmissionV1(
     call: io.ktor.server.application.ApplicationCall,
-    feedbackRepository: FeedbackRepository
+    feedbackService: FeedbackService
 ) {
     val identity = call.getCallerIdentity()
     val body = call.receiveText()
@@ -160,7 +161,7 @@ private suspend fun handleSubmissionV1(
 
     validateSubmissionV1(submission)
 
-    val id = feedbackRepository.save(
+    val id = feedbackService.save(
         feedbackJson = body,
         team = identity.team,
         app = identity.app

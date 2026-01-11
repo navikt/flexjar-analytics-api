@@ -3,6 +3,7 @@ package no.nav.flexjar.repository
 import kotlinx.serialization.json.*
 import no.nav.flexjar.domain.*
 import no.nav.flexjar.service.DiscoveryService
+import no.nav.flexjar.service.TextProcessor
 import org.jetbrains.exposed.sql.*
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
 import org.jetbrains.exposed.sql.transactions.transaction
@@ -57,7 +58,7 @@ class FeedbackStatsRepository {
             val byRating = ratingQuery
                 .groupBy(ratingExpr)
                 .associate { row ->
-                    (row[ratingExpr] ?: "unknown") to row[FeedbackTable.id.count()].toInt()
+                    row[ratingExpr] to row[FeedbackTable.id.count()].toInt()
                 }
 
             val appQuery = FeedbackTable.select(FeedbackTable.app, FeedbackTable.id.count())
@@ -68,7 +69,7 @@ class FeedbackStatsRepository {
                 .orderBy(FeedbackTable.id.count() to SortOrder.DESC)
                 .limit(20)
                 .associate { row -> 
-                    (row[FeedbackTable.app] ?: "unknown") to row[FeedbackTable.id.count()].toInt()
+                    row[FeedbackTable.app] to row[FeedbackTable.id.count()].toInt()
                 }
             
             val dateExpr = DateDate(FeedbackTable.opprettet)
@@ -91,7 +92,7 @@ class FeedbackStatsRepository {
                  .orderBy(FeedbackTable.id.count() to SortOrder.DESC)
                  .limit(20)
                  .associate { row ->
-                     (row[surveyIdExpr] ?: "unknown") to row[FeedbackTable.id.count()].toInt()
+                     row[surveyIdExpr] to row[FeedbackTable.id.count()].toInt()
                  }
 
             FeedbackStatsResult(
@@ -277,7 +278,7 @@ class FeedbackStatsRepository {
 
             val wordData = mutableMapOf<String, WordAccumulator>()
             for (response in blockerResponses) {
-                val words = extractWords(response.blocker)
+                val words = TextProcessor.extractWords(response.blocker)
                 val seenWordsInResponse = mutableSetOf<String>()
                 for (word in words) {
                     val acc = wordData.getOrPut(word) { WordAccumulator() }
@@ -292,11 +293,11 @@ class FeedbackStatsRepository {
             val wordFrequency = wordData.entries
                 .sortedByDescending { it.value.count }
                 .take(30)
-                .map { (word, acc) ->
+                .map { entry ->
                     BlockerWordFrequencyEntry(
-                        word = word,
-                        count = acc.count,
-                        sourceResponses = acc.sourceResponses.toList()
+                        word = entry.key,
+                        count = entry.value.count,
+                        sourceResponses = entry.value.sourceResponses.toList()
                     )
                 }
 
@@ -318,14 +319,14 @@ class FeedbackStatsRepository {
             )
 
             for (response in blockerResponses) {
-                val blockerWordStems = extractWords(response.blocker).map { stemNorwegian(it) }
+                val blockerWordStems = TextProcessor.extractWords(response.blocker).map { TextProcessor.stemNorwegian(it) }
                 var matchedAny = false
 
                 for (acc in themeAccumulators) {
                     if (acc.themeId == annetThemeId) continue
 
                     val theme = themes.find { it.id == acc.themeId } ?: continue
-                    val keywordStems = theme.keywords.map { stemNorwegian(it.lowercase()) }
+                    val keywordStems = theme.keywords.map { TextProcessor.stemNorwegian(it.lowercase()) }
                     if (keywordStems.any { it in blockerWordStems }) {
                         acc.count++
                         if (acc.examples.size < 3 && acc.usedExamples.add(response.blocker)) {
@@ -420,32 +421,6 @@ class FeedbackStatsRepository {
         }
     }
 
-    private fun extractWords(text: String): List<String> {
-        return text.lowercase()
-            .replace(Regex("[^a-zæøåA-ZÆØÅ0-9\\s]"), " ")
-            .split(Regex("\\s+"))
-            .filter { it.length > 2 && it !in DiscoveryService.STOP_WORDS }
-    }
-
-    private fun stemNorwegian(word: String): String {
-        var stem = word.lowercase().trim()
-
-        val suffixes = listOf(
-            "ene", "ane",
-            "en", "et", "a",
-            "er", "ar",
-            "te", "de",
-            "ere", "est"
-        )
-
-        for (suffix in suffixes) {
-            if (stem.length > suffix.length + 2 && stem.endsWith(suffix)) {
-                return stem.dropLast(suffix.length)
-            }
-        }
-
-        return stem
-    }
 
     private fun parseSubmittedAt(value: String): Instant {
         return try {

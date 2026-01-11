@@ -174,23 +174,17 @@ class FeedbackRepositoryTest : FunSpec({
         }
     }
 
-    context("softDelete") {
-        test("soft deletes feedback") {
+    context("updateJson") {
+        test("updates feedback JSON") {
             val id = UUID.randomUUID().toString()
-            insertTestFeedback(id = id, text = "Sensitive feedback")
+            insertTestFeedback(id = id, text = "Old text")
             
-            val result = repository.softDelete(id)
+            val newJson = """{"surveyId": "test", "answers": []}"""
+            val result = repository.updateJson(id, newJson)
             
             result shouldBe true
             val feedback = repository.findById(id)
-            // After soft delete, the feedback should still exist but be marked
             feedback.shouldNotBeNull()
-        }
-
-        test("returns false for non-existent feedback") {
-            val result = repository.softDelete("non-existent")
-            
-            result shouldBe false
         }
     }
 

@@ -16,12 +16,13 @@ import no.nav.flexjar.domain.FILTER_ALL
 import no.nav.flexjar.domain.TagInput
 import no.nav.flexjar.domain.TeamsAndApps
 import no.nav.flexjar.repository.FeedbackRepository
+import no.nav.flexjar.service.FeedbackService
 import org.slf4j.LoggerFactory
 
 private val log = LoggerFactory.getLogger("FeedbackRoutes")
-private val defaultFeedbackRepository = FeedbackRepository()
+private val defaultFeedbackService = FeedbackService()
 
-fun Route.feedbackRoutes(repository: FeedbackRepository = defaultFeedbackRepository) {
+fun Route.feedbackRoutes(service: FeedbackService = defaultFeedbackService) {
     // List feedback with pagination and filters
     get<ApiV1Intern.Feedback> { params ->
         // Team is already validated by TeamAuthorizationPlugin
@@ -55,7 +56,7 @@ fun Route.feedbackRoutes(repository: FeedbackRepository = defaultFeedbackReposit
             segments = segments
         )
         
-        val (content, total, page) = repository.findPaginated(query)
+        val (content, total, page) = service.findPaginated(query)
         val totalPages = if (query.size > 0) ((total + query.size - 1) / query.size).toInt() else 0
         
         call.respond(FeedbackPage(
@@ -71,7 +72,8 @@ fun Route.feedbackRoutes(repository: FeedbackRepository = defaultFeedbackReposit
     
     // Get single feedback
     get<ApiV1Intern.Feedback.Id> { params ->
-        val feedback = repository.findById(params.id)
+        val team = call.authorizedTeam
+        val feedback = service.findById(params.id, team)
         if (feedback == null) {
             call.respond(HttpStatusCode.NotFound)
             return@get
@@ -82,7 +84,8 @@ fun Route.feedbackRoutes(repository: FeedbackRepository = defaultFeedbackReposit
     
     // Soft delete (clears feedback text)
     delete<ApiV1Intern.Feedback.Id> { params ->
-        val deleted = repository.softDelete(params.id)
+        val team = call.authorizedTeam
+        val deleted = service.softDelete(params.id, team)
         if (deleted) {
             call.respond(HttpStatusCode.NoContent)
         } else {
@@ -92,8 +95,9 @@ fun Route.feedbackRoutes(repository: FeedbackRepository = defaultFeedbackReposit
     
     // Add tag
     post<ApiV1Intern.Feedback.Id.Tags> { params ->
+        val team = call.authorizedTeam
         val input = call.receive<TagInput>()
-        val added = repository.addTag(params.parent.id, input.tag)
+        val added = service.addTag(params.parent.id, team, input.tag)
         
         if (added) {
             call.respond(HttpStatusCode.Created)
@@ -104,13 +108,14 @@ fun Route.feedbackRoutes(repository: FeedbackRepository = defaultFeedbackReposit
     
     // Remove tag
     delete<ApiV1Intern.Feedback.Id.Tags> { params ->
+        val team = call.authorizedTeam
         val tag = params.tag
         if (tag.isNullOrBlank()) {
             call.respond(HttpStatusCode.BadRequest, mapOf("error" to "Missing tag parameter"))
             return@delete
         }
         
-        val removed = repository.removeTag(params.parent.id, tag)
+        val removed = service.removeTag(params.parent.id, team, tag)
         if (removed) {
             call.respond(HttpStatusCode.NoContent)
         } else {
@@ -120,25 +125,25 @@ fun Route.feedbackRoutes(repository: FeedbackRepository = defaultFeedbackReposit
     
     // Get all tags
     get<ApiV1Intern.Feedback.AllTags> {
-        val tags = repository.findAllTags()
+        val tags = service.findAllTags()
         call.respond(tags)
     }
     
     // Get all teams and their apps
     get<ApiV1Intern.Feedback.Teams> {
-        val teamsAndApps = repository.findAllTeamsAndApps()
+        val teamsAndApps = service.findAllTeamsAndApps()
         call.respond(TeamsAndApps(teams = teamsAndApps))
     }
     
     // Get all metadata keys and values (filtered by cardinality for graph-friendly data)
     get<ApiV1Intern.Feedback.MetadataKeys> { params ->
         val team = call.authorizedTeam
-        val metadataKeys = repository.findMetadataKeysForSurvey(params.surveyId, team)
+        val metadataKeys = FeedbackRepository().findMetadataKeysForSurvey(params.surveyId, team)
         
         // Filter by cardinality if specified (default 10)
         val maxCard = params.maxCardinality
         val filteredKeys = if (maxCard != null) {
-            metadataKeys.filter { it.value.size <= maxCard }
+            metadataKeys.filter { entry -> entry.value.size <= maxCard }
         } else {
             metadataKeys
         }
@@ -152,12 +157,12 @@ fun Route.feedbackRoutes(repository: FeedbackRepository = defaultFeedbackReposit
 
     // Get all surveys (grouped by app)
     get<ApiV1Intern.Surveys> {
-        val teamsAndApps = repository.findAllTeamsAndApps()
+        val teamsAndApps = service.findAllTeamsAndApps()
         call.respond(teamsAndApps)
     }
 }
 
-fun Route.surveyFacetRoutes(repository: FeedbackRepository = defaultFeedbackRepository) {
+fun Route.surveyFacetRoutes(service: FeedbackService = defaultFeedbackService) {
     // Get all context tags and values with counts for a survey (filtered by cardinality)
     get<ApiV1Intern.Surveys.Id.ContextTags> { params ->
         val team = call.authorizedTeam
@@ -168,7 +173,8 @@ fun Route.surveyFacetRoutes(repository: FeedbackRepository = defaultFeedbackRepo
             if (parts.size == 2) Pair(parts[0], parts[1]) else null
         } ?: emptyList()
 
-        val contextTags = repository.findContextTagsForSurvey(
+        // repository lookup for advanced facet query
+        val contextTags = FeedbackRepository().findContextTagsForSurvey(
             surveyId = params.parent.surveyId,
             team = team,
             task = params.task,
@@ -177,7 +183,7 @@ fun Route.surveyFacetRoutes(repository: FeedbackRepository = defaultFeedbackRepo
 
         val maxCard = params.maxCardinality
         val filteredTags = if (maxCard != null) {
-            contextTags.filter { it.value.size <= maxCard }
+            contextTags.filter { entry -> entry.value.size <= maxCard }
         } else {
             contextTags
         }
