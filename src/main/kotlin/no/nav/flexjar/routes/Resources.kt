@@ -138,6 +138,8 @@ class ApiV1Intern {
                 val maxCardinality: Int? = 10,
                 /** Task filter for Top Tasks drill-down (matches option label) */
                 val task: String? = null,
+                /** Segment filter - repeated params like segment=key:value */
+                val segment: List<String>? = null,
             )
         }
     }

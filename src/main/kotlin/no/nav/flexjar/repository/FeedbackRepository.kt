@@ -350,11 +350,20 @@ class FeedbackRepository(
     fun findContextTagsForSurvey(
         surveyId: String,
         team: String = "flex",
-        task: String? = null
+        task: String? = null,
+        segments: List<Pair<String, String>> = emptyList(),
     ): Map<String, List<MetadataValueWithCount>> {
         return transaction {
             if (task.isNullOrBlank()) {
-                val sql = """
+                val segmentClauses = segments
+                    .map { (key, _) ->
+                        // Uses ->> to compare string values
+                        "AND feedback_json::json->'context'->'tags'->> ? = ?"
+                    }
+
+                val sql = buildString {
+                    append(
+                        """
                     SELECT
                         key as tag_key,
                         feedback_json::json->'context'->'tags'->>key as tag_value,
@@ -364,11 +373,38 @@ class FeedbackRepository(
                     WHERE team = ?
                       AND feedback_json::json->>'surveyId' = ?
                       AND feedback_json::jsonb->'context'->'tags' IS NOT NULL
+                    """.trimIndent()
+                    )
+
+                    if (segmentClauses.isNotEmpty()) {
+                        append("\n")
+                        append(segmentClauses.joinToString("\n"))
+                    }
+
+                    append("\n")
+                    append(
+                        """
                     GROUP BY key, tag_value
                 """.trimIndent()
+                    )
+                }
 
                 val result = mutableMapOf<String, MutableList<MetadataValueWithCount>>()
-                exec(sql, listOf(VarCharColumnType() to team, VarCharColumnType() to surveyId)) { rs ->
+
+                val args = buildList {
+                    add(VarCharColumnType() to team)
+                    add(VarCharColumnType() to surveyId)
+
+                    for ((key, value) in segments) {
+                        val safeKey = key.trim()
+                        val safeValue = value.trim()
+                        if (safeKey.isBlank() || safeValue.isBlank()) continue
+                        add(VarCharColumnType() to safeKey)
+                        add(VarCharColumnType() to safeValue)
+                    }
+                }
+
+                exec(sql, args) { rs ->
                     while (rs.next()) {
                         val key = rs.getString("tag_key") ?: continue
                         val value = rs.getString("tag_value") ?: continue
@@ -391,6 +427,19 @@ class FeedbackRepository(
             val records = dbQuery.map { it.toDto() }
 
             val taskFiltered = records.filter { feedback ->
+                // Segment filter (context.tags)
+                if (segments.isNotEmpty()) {
+                    val tags = feedback.context?.tags
+                    if (tags == null) return@filter false
+
+                    val matchesSegments = segments.all { (key, value) ->
+                        val safeKey = key.trim()
+                        val safeValue = value.trim()
+                        safeKey.isNotBlank() && safeValue.isNotBlank() && tags[safeKey] == safeValue
+                    }
+                    if (!matchesSegments) return@filter false
+                }
+
                 val taskAnswer = feedback.answers.find { a ->
                     a.fieldId in TopTasksFieldIds.task
                 }
