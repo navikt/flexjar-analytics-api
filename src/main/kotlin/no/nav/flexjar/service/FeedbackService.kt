@@ -31,34 +31,11 @@ class FeedbackService(
 
     fun removeTag(id: String, team: String, tag: String) = repository.removeTag(id, team, tag)
 
-    fun softDelete(id: String, team: String): Boolean {
-        val feedback = repository.findRawById(id, team) ?: return false
-        
-        val jsonObj = try {
-            json.parseToJsonElement(feedback.feedbackJson).jsonObject
-        } catch (e: Exception) {
-            log.error("Failed to parse feedback JSON for soft delete: $id", e)
-            return false
-        }
-        
-        val answers = jsonObj["answers"] as? JsonArray ?: return false
-        val filteredAnswers = answers.mapNotNull { answerEl ->
-            val answerObj = answerEl.jsonObject
-            val fieldType = answerObj["fieldType"]?.jsonPrimitive?.contentOrNull
-            val valueType = answerObj["value"]
-                ?.jsonObject
-                ?.get("type")
-                ?.jsonPrimitive
-                ?.contentOrNull
-
-            if (fieldType == "TEXT" || valueType == "text") null else answerEl
-        }
-        
-        val newJsonObj = jsonObj.toMutableMap()
-        newJsonObj["answers"] = JsonArray(filteredAnswers)
-        
-        val newJson = json.encodeToString(JsonObject.serializer(), JsonObject(newJsonObj))
-        return repository.updateJson(id, team, newJson)
+    /**
+     * Permanently delete a feedback item from the database.
+     */
+    fun delete(id: String, team: String): Boolean {
+        return repository.delete(id, team)
     }
 
     private fun redactFeedbackJson(feedbackJson: String): String {

@@ -82,10 +82,10 @@ fun Route.feedbackRoutes(service: FeedbackService = defaultFeedbackService) {
         call.respond(feedback)
     }
     
-    // Soft delete (clears feedback text)
+    // Delete feedback permanently
     delete<ApiV1Intern.Feedback.Id> { params ->
         val team = call.authorizedTeam
-        val deleted = service.softDelete(params.id, team)
+        val deleted = service.delete(params.id, team)
         if (deleted) {
             call.respond(HttpStatusCode.NoContent)
         } else {

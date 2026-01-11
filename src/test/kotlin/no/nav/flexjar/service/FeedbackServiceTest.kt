@@ -49,8 +49,8 @@ class FeedbackServiceTest : FunSpec({
         }
     }
 
-    context("softDelete") {
-        test("removes text answers from feedback") {
+    context("delete") {
+        test("permanently removes feedback from database") {
             val id = UUID.randomUUID().toString()
             val feedbackJson = """
                 {
@@ -58,7 +58,7 @@ class FeedbackServiceTest : FunSpec({
                         {
                             "fieldId": "q1",
                             "fieldType": "TEXT",
-                            "value": {"type": "text", "text": "Sensitive text"}
+                            "value": {"type": "text", "text": "Some feedback"}
                         },
                         {
                             "fieldId": "q2",
@@ -71,15 +71,16 @@ class FeedbackServiceTest : FunSpec({
             
             insertTestFeedbackWithJson(id = id, team = "flex", feedbackJson = feedbackJson)
             
-            val result = service.softDelete(id, "flex")
+            // Verify it exists first
+            repository.findRawById(id) shouldBe repository.findRawById(id)
+            
+            val result = service.delete(id, "flex")
             
             result shouldBe true
-            val updated = repository.findRawById(id)
-            updated?.feedbackJson shouldNotContain "Sensitive text"
-            updated?.feedbackJson shouldContain "RATING"
+            repository.findRawById(id) shouldBe null
         }
 
-        test("does not modify feedback from another team") {
+        test("does not delete feedback from another team") {
             val id = UUID.randomUUID().toString()
             val feedbackJson = """
                 {
@@ -95,9 +96,10 @@ class FeedbackServiceTest : FunSpec({
 
             insertTestFeedbackWithJson(id = id, team = "team-a", feedbackJson = feedbackJson)
 
-            val result = service.softDelete(id, "team-b")
+            val result = service.delete(id, "team-b")
 
             result shouldBe false
+            // Should still exist
             val unchanged = repository.findRawById(id)
             unchanged?.feedbackJson shouldContain "Team secret"
         }

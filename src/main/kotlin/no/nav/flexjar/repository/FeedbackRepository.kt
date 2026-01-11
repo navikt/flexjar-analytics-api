@@ -124,6 +124,18 @@ class FeedbackRepository {
         }
     }
 
+    /**
+     * Permanently delete a feedback item from the database.
+     * Returns true if the item was deleted, false if not found.
+     */
+    fun delete(id: String, team: String): Boolean {
+        return transaction {
+            FeedbackTable.deleteWhere { 
+                (FeedbackTable.id eq id) and (FeedbackTable.team eq team) 
+            } > 0
+        }
+    }
+
     internal fun addTag(id: String, tag: String): Boolean {
         return transaction {
             val record = FeedbackTable.select(FeedbackTable.tags)
