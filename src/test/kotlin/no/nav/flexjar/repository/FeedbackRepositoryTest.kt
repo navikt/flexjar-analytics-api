@@ -107,9 +107,9 @@ class FeedbackRepositoryTest : FunSpec({
 
     context("findAllTags") {
         test("returns empty set when no tags exist") {
-            insertTestFeedback(tags = null)
+            insertTestFeedback(team = "flex", tags = null)
             
-            val tags = repository.findAllTags()
+            val tags = repository.findAllTags("flex")
             
             tags.shouldBeEmpty()
         }
@@ -155,7 +155,7 @@ class FeedbackRepositoryTest : FunSpec({
             result shouldBe true
             
             // Verify through findAllTags
-            val allTags = repository.findAllTags()
+            val allTags = repository.findAllTags("team-test")
             allTags shouldContain "new-tag"
             allTags shouldContain "existing-tag"
         }

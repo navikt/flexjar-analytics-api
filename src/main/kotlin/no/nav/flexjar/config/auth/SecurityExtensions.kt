@@ -1,9 +1,13 @@
 package no.nav.flexjar.config.auth
 
 import io.ktor.server.application.*
-import io.ktor.server.auth.*
+import io.ktor.util.*
 import no.nav.flexjar.config.getBrukerPrincipal
 import no.nav.flexjar.config.exception.ApiErrorException
+
+// Re-declare keys here to access via getOrNull (avoids internal implementation coupling)
+private val AuthorizedTeamKey = AttributeKey<String>("authorizedTeam")
+private val AuthorizedTeamsKey = AttributeKey<Set<String>>("authorizedTeams")
 
 /**
  * Extension to get the authorized team for this call.
@@ -12,21 +16,15 @@ import no.nav.flexjar.config.exception.ApiErrorException
  * Throws ForbiddenException if no team is authorized.
  */
 val ApplicationCall.authorizedTeamSafe: String
-    get() = try {
-        this.authorizedTeam
-    } catch (e: IllegalStateException) {
-        throw ApiErrorException.ForbiddenException("Access denied: No authorized team found for this request")
-    }
+    get() = attributes.getOrNull(AuthorizedTeamKey)
+        ?: throw ApiErrorException.ForbiddenException("Access denied: No authorized team found for this request")
 
 /**
  * Extension to get all teams the user is authorized for.
+ * Returns empty set if authorization context is not available.
  */
 val ApplicationCall.authorizedTeamsSafe: Set<String>
-    get() = try {
-        this.authorizedTeams
-    } catch (e: IllegalStateException) {
-        emptySet()
-    }
+    get() = attributes.getOrNull(AuthorizedTeamsKey) ?: emptySet()
 
 /**
  * Extension to get the validated principal.

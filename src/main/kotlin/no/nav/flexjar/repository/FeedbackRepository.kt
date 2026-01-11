@@ -242,19 +242,6 @@ class FeedbackRepository {
         }
     }
 
-    @Deprecated("Use version with team parameter", ReplaceWith("findAllTags(team)"))
-    internal fun findAllTags(): Set<String> {
-        return transaction {
-             FeedbackTable.select(FeedbackTable.tags)
-                .where { FeedbackTable.tags.isNotNull() and (FeedbackTable.tags neq "") }
-                .withDistinct()
-                .mapNotNull { it[FeedbackTable.tags] }
-                .flatMap { it.split(",") }
-                .map { it.trim().lowercase() }
-                .filter { it.isNotBlank() }
-                .toSet()
-        }
-    }
 
     /**
      * Find all tags for a specific team.
