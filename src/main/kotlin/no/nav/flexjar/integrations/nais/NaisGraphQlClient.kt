@@ -29,6 +29,7 @@ import java.time.Clock
 import java.time.Duration
 import java.time.Instant
 import java.util.concurrent.atomic.AtomicReference
+import java.util.concurrent.atomic.AtomicBoolean
 
 private val log = LoggerFactory.getLogger("NaisGraphQlClient")
 
@@ -88,6 +89,8 @@ class NaisGraphQlClient private constructor(
     private val client: HttpClient = defaultHttpClient()
 ) {
     private val userAgent: String = "flexjar-analytics-api"
+
+    private val hasLoggedFirstSuccess = AtomicBoolean(false)
     // Health tracking
     private val lastSuccessfulCall = AtomicReference<Instant?>(null)
     private val lastError = AtomicReference<String?>(null)
@@ -214,7 +217,7 @@ class NaisGraphQlClient private constructor(
         // Cache with appropriate TTL based on result
         val ttl = if (teams.isNotEmpty()) CacheTtl.HAS_TEAMS else CacheTtl.NO_TEAMS
         teamCache.set(email, teams, ttl)
-        recordSuccess()
+        recordSuccess(source = "user", teamsCount = teams.size, ttl = ttl)
         
         log.debug("Fetched teams from NAIS API for user: $teams (TTL: ${ttl.toMinutes()}m)")
         return NaisApiResult.Success(teams)
@@ -313,7 +316,7 @@ class NaisGraphQlClient private constructor(
 
         val ttl = if (teams.isNotEmpty()) CacheTtl.HAS_TEAMS else CacheTtl.NO_TEAMS
         teamCache.set(viewerCacheKey, teams, ttl)
-        recordSuccess()
+        recordSuccess(source = "viewer", teamsCount = teams.size, ttl = ttl)
         
         return NaisApiResult.Success(teams)
     }
@@ -349,9 +352,16 @@ class NaisGraphQlClient private constructor(
         log.info("NAIS API cache cleared")
     }
     
-    private fun recordSuccess() {
+    private fun recordSuccess(source: String, teamsCount: Int, ttl: Duration) {
         lastSuccessfulCall.set(Instant.now(clock))
         lastError.set(null)
+
+        // Avoid noisy logs: just a single confirmation that NAIS lookup works.
+        if (hasLoggedFirstSuccess.compareAndSet(false, true)) {
+            log.info(
+                "NAIS API lookup succeeded (source=$source, teamsCount=$teamsCount, ttlMinutes=${ttl.toMinutes()}, cache=${teamCache::class.simpleName})"
+            )
+        }
     }
     
     private fun recordError(message: String, cause: Throwable? = null) {
