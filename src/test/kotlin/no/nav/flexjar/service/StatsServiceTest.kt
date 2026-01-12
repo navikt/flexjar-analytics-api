@@ -43,7 +43,7 @@ class StatsServiceTest {
         
         val days = service.calculateDays(from, to)
         
-        assertEquals(14, days)
+        assertEquals(15, days)
     }
     
     @Test
@@ -60,8 +60,7 @@ class StatsServiceTest {
     fun `calculateDays returns 30 for null values`() {
         val days = service.calculateDays(null, null)
         
-        // Uses default of 30 days ago to now
-        assertTrue(days >= 30)
+        assertEquals(30, days)
     }
     
     @Test

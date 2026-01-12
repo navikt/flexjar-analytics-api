@@ -259,9 +259,11 @@ class StatsService(
      */
     fun calculateDays(from: String?, to: String?): Int {
         return try {
-            val fromDate = from?.let { LocalDate.parse(it.take(10)) } ?: LocalDate.now().minusDays(30)
             val toDate = to?.let { LocalDate.parse(it.take(10)) } ?: LocalDate.now()
-            ChronoUnit.DAYS.between(fromDate, toDate).toInt().coerceAtLeast(1)
+            // Interpret the period as inclusive of both fromDate and toDate.
+            // Default period should be "last 30 days" including today.
+            val fromDate = from?.let { LocalDate.parse(it.take(10)) } ?: toDate.minusDays(29)
+            (ChronoUnit.DAYS.between(fromDate, toDate).toInt() + 1).coerceAtLeast(1)
         } catch (e: Exception) {
             30
         }
