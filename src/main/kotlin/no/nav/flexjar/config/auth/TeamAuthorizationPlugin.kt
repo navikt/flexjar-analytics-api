@@ -123,14 +123,14 @@ private suspend fun resolveAuthorizedTeams(
     }
 
     val resolvedTeams = if (teamsByEmail.isNotEmpty()) {
-        log.info("Resolved teams from NAIS API (by email) for ${principal.navIdent}: $teamsByEmail")
+        log.debug("Resolved teams from NAIS API (by email) for ${principal.navIdent}: $teamsByEmail")
         teamsByEmail
     } else {
         // Matches NAIS Console behavior: `me { ... on User { teams { ... }}}`.
         // Depending on NAIS API auth configuration, `me` might not be a User.
         val viewerTeams = naisLookup.getTeamSlugsForViewer()
         if (viewerTeams.isNotEmpty()) {
-            log.info("Resolved teams from NAIS API (viewer query) for ${principal.navIdent}: $viewerTeams")
+            log.debug("Resolved teams from NAIS API (viewer query) for ${principal.navIdent}: $viewerTeams")
         }
         viewerTeams
     }

@@ -127,7 +127,7 @@ class NaisGraphQlClient private constructor(
             cacheHitCounter.increment()
             // Filter out sentinel value for empty teams
             val teams = cachedTeams.filterNot { it == "__EMPTY__" }.toSet()
-            log.debug("Cache hit for user teams (email=$email): $teams")
+            log.debug("Cache hit for user teams: $teams")
             return NaisApiResult.Success(teams)
         }
         
@@ -148,7 +148,7 @@ class NaisGraphQlClient private constructor(
                 )
             }
         } catch (e: Exception) {
-            recordError("Failed to call NAIS GraphQL for user teams (email=$email)", e)
+            recordError("Failed to call NAIS GraphQL for user teams", e)
             return NaisApiResult.Error("API call failed", e)
         } finally {
             apiCallTimer.record(Duration.ofNanos(System.nanoTime() - startTime))
@@ -163,7 +163,7 @@ class NaisGraphQlClient private constructor(
         val body = try {
             response.body<GraphQlResponse<UserTeamsData>>()
         } catch (e: Exception) {
-            recordError("Failed to parse NAIS GraphQL response (email=$email)", e)
+            recordError("Failed to parse NAIS GraphQL response for user teams", e)
             return NaisApiResult.Error("Response parsing failed", e)
         }
 
@@ -183,7 +183,7 @@ class NaisGraphQlClient private constructor(
         teamCache.set(email, teams, ttl)
         recordSuccess()
         
-        log.debug("Fetched teams from NAIS API for user (email=$email): $teams (TTL: ${ttl.toMinutes()}m)")
+        log.debug("Fetched teams from NAIS API for user: $teams (TTL: ${ttl.toMinutes()}m)")
         return NaisApiResult.Success(teams)
     }
 
