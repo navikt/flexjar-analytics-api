@@ -146,11 +146,49 @@ If enabled, the backend can authorize analytics access by looking up team member
 
 **Setup:**
 
-1. Create a secret in NAIS Console named `flexjar-analytics-api` (in both dev and prod) with keys:
-   - `NAIS_API_GRAPHQL_URL` (example: `https://console.nav.cloud.nais.io/graphql`)
-   - `NAIS_API_KEY` (get this from NAIS Console)
+1. Create a secret in NAIS Console named `flexjar-analytics-api` (in both dev and prod) with key:
+  - `NAIS_API_KEY` (get this from NAIS Console)
+
+  The manifests already set `NAIS_API_GRAPHQL_URL` to `https://console.nav.cloud.nais.io/graphql`.
+  You may also put `NAIS_API_GRAPHQL_URL` in the same secret, but it is not required.
+
+  Example (dev, run in the correct namespace):
+
+  ```bash
+  kubectl create secret generic flexjar-analytics-api \
+    --from-literal=NAIS_API_KEY='<paste-api-key-here>'
+  ```
 
 2. The manifests already reference this secret via `spec.envFrom`.
+
+  If the secret does not exist, the deployment will fail because Kubernetes cannot mount env vars from a missing secret.
+
+**Local testing:**
+
+To test NAIS team lookups locally, you normally need a valid `NAIS_API_KEY` (the client authenticates with `X-Api-Key`).
+
+If you are logged in with the NAIS CLI, you can also use the local NAIS API proxy to call the GraphQL endpoint without a real key:
+
+```bash
+nais login -n
+nais alpha api proxy  # listens on localhost:4242
+
+# Proxy forwards to https://console.nav.cloud.nais.io/graphql
+export NAIS_API_GRAPHQL_URL='http://localhost:4242/graphql'
+
+# Must be non-empty to enable the integration in this app.
+# The proxy accepts requests even if this is not a real key.
+export NAIS_API_KEY='dummy'
+
+./gradlew run
+```
+
+```bash
+export NAIS_API_GRAPHQL_URL='https://console.nav.cloud.nais.io/graphql'
+export NAIS_API_KEY='<dev-api-key>'
+
+./gradlew run
+```
 
 **How it works:**
 

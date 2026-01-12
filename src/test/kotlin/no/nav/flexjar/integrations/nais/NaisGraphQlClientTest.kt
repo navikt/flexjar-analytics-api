@@ -4,9 +4,13 @@ import io.ktor.client.*
 import io.ktor.client.engine.mock.*
 import io.ktor.client.plugins.contentnegotiation.*
 import io.ktor.http.*
+import io.ktor.http.content.OutgoingContent
+import io.ktor.http.content.TextContent
 import io.ktor.serialization.kotlinx.json.*
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import no.nav.flexjar.integrations.valkey.InMemoryTeamCache
 import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.BeforeEach
@@ -45,6 +49,16 @@ class NaisGraphQlClientTest {
             }
         }
     }
+
+    private fun bodyAsText(body: Any): String {
+        return when (body) {
+            is String -> body
+            is ByteArray -> body.decodeToString()
+            is TextContent -> body.text
+            is OutgoingContent.ByteArrayContent -> body.bytes().decodeToString()
+            else -> body.toString()
+        }
+    }
     
     @Test
     fun `getTeamSlugsForUser returns teams on successful response`() = runBlocking {
@@ -74,6 +88,108 @@ class NaisGraphQlClientTest {
         val result = client.getTeamSlugsForUser("test@nav.no")
         
         assertEquals(setOf("team-esyfo", "flex"), result)
+    }
+
+    @Test
+    fun `getTeamSlugsForUser sends expected query, variables, and X-Api-Key header`() = runBlocking {
+        val responseJson = """{"data":{"user":{"teams":{"nodes":[]}}}}"""
+
+        var observedEmail: String? = null
+        var observedQuery: String? = null
+
+        val mockEngine = MockEngine { request ->
+            assertTrue(request.url.toString().startsWith(testUrl))
+
+            val observedApiKey = request.headers["X-Api-Key"] ?: request.headers["x-api-key"]
+            assertEquals(testApiKey, observedApiKey)
+
+            val contentType = request.headers[HttpHeaders.ContentType]
+                ?: (request.body as? OutgoingContent)?.contentType?.toString()
+            assertNotNull(contentType)
+            assertTrue(contentType!!.startsWith(ContentType.Application.Json.toString()))
+
+            val bodyText = bodyAsText(request.body)
+            val json = Json.parseToJsonElement(bodyText).jsonObject
+
+            observedQuery = json["query"]?.jsonPrimitive?.content
+            observedEmail = json["variables"]?.jsonObject?.get("email")?.jsonPrimitive?.content
+
+            respond(
+                content = responseJson,
+                status = HttpStatusCode.OK,
+                headers = headersOf(HttpHeaders.ContentType, "application/json")
+            )
+        }
+
+        val mockClient = HttpClient(mockEngine) {
+            install(ContentNegotiation) {
+                json(Json { ignoreUnknownKeys = true; isLenient = true })
+            }
+        }
+
+        val client = NaisGraphQlClient.forTesting(
+            graphqlUrl = testUrl,
+            apiKey = testApiKey,
+            teamCache = teamCache,
+            clock = fixedClock,
+            client = mockClient
+        )
+
+        client.getTeamSlugsForUser("test@nav.no")
+
+        assertNotNull(observedQuery)
+        assertTrue(observedQuery!!.contains("query UserTeams"))
+        assertTrue(observedQuery!!.contains("user(email"))
+        assertEquals("test@nav.no", observedEmail)
+    }
+
+    @Test
+    fun `getTeamSlugsForViewer sends expected query and X-Api-Key header`() = runBlocking {
+        val responseJson = """{"data":{"me":{"__typename":"User","teams":{"nodes":[]}}}}"""
+
+        var observedQuery: String? = null
+
+        val mockEngine = MockEngine { request ->
+            assertTrue(request.url.toString().startsWith(testUrl))
+
+            val observedApiKey = request.headers["X-Api-Key"] ?: request.headers["x-api-key"]
+            assertEquals(testApiKey, observedApiKey)
+
+            val contentType = request.headers[HttpHeaders.ContentType]
+                ?: (request.body as? OutgoingContent)?.contentType?.toString()
+            assertNotNull(contentType)
+            assertTrue(contentType!!.startsWith(ContentType.Application.Json.toString()))
+
+            val bodyText = bodyAsText(request.body)
+            val json = Json.parseToJsonElement(bodyText).jsonObject
+            observedQuery = json["query"]?.jsonPrimitive?.content
+
+            respond(
+                content = responseJson,
+                status = HttpStatusCode.OK,
+                headers = headersOf(HttpHeaders.ContentType, "application/json")
+            )
+        }
+
+        val mockClient = HttpClient(mockEngine) {
+            install(ContentNegotiation) {
+                json(Json { ignoreUnknownKeys = true; isLenient = true })
+            }
+        }
+
+        val client = NaisGraphQlClient.forTesting(
+            graphqlUrl = testUrl,
+            apiKey = testApiKey,
+            teamCache = teamCache,
+            clock = fixedClock,
+            client = mockClient
+        )
+
+        client.getTeamSlugsForViewer()
+
+        assertNotNull(observedQuery)
+        assertTrue(observedQuery!!.contains("query ViewerTeams"))
+        assertTrue(observedQuery!!.contains("me"))
     }
     
     @Test
@@ -207,6 +323,41 @@ class NaisGraphQlClientTest {
         // Third call with different email - should hit the API
         client.getTeamSlugsForUser("other@nav.no")
         assertEquals(2, callCount)
+    }
+
+    @Test
+    fun `cache sentinel __EMPTY__ is treated as empty teams`() = runBlocking {
+        // If Valkey stores a sentinel for empty sets, the client filters it out.
+        teamCache.set("test@nav.no", setOf("__EMPTY__"), Duration.ofHours(1))
+
+        var callCount = 0
+        val mockEngine = MockEngine { _ ->
+            callCount++
+            respond(
+                content = """{"data":{"user":{"teams":{"nodes":[]}}}}""",
+                status = HttpStatusCode.OK,
+                headers = headersOf(HttpHeaders.ContentType, "application/json")
+            )
+        }
+
+        val mockClient = HttpClient(mockEngine) {
+            install(ContentNegotiation) {
+                json(Json { ignoreUnknownKeys = true; isLenient = true })
+            }
+        }
+
+        val client = NaisGraphQlClient.forTesting(
+            graphqlUrl = testUrl,
+            apiKey = testApiKey,
+            teamCache = teamCache,
+            clock = fixedClock,
+            client = mockClient
+        )
+
+        val result = client.getTeamSlugsForUser("test@nav.no")
+
+        assertEquals(emptySet<String>(), result)
+        assertEquals(0, callCount, "Cache hit should avoid API call")
     }
     
     @Test

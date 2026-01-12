@@ -12,6 +12,29 @@ import org.slf4j.LoggerFactory
 private val log = LoggerFactory.getLogger("TeamAuthorizationPlugin")
 
 /**
+ * Minimal abstraction so TeamAuthorizationPlugin can be tested without calling the real NAIS API.
+ */
+interface NaisTeamLookup {
+    suspend fun getTeamSlugsForUser(email: String): Set<String>
+    suspend fun getTeamSlugsForViewer(): Set<String>
+}
+
+private class NaisGraphQlTeamLookup(private val client: NaisGraphQlClient) : NaisTeamLookup {
+    override suspend fun getTeamSlugsForUser(email: String): Set<String> = client.getTeamSlugsForUser(email)
+    override suspend fun getTeamSlugsForViewer(): Set<String> = client.getTeamSlugsForViewer()
+}
+
+class TeamAuthorizationConfig {
+    /**
+     * Provides a NAIS team lookup implementation (or null to disable NAIS lookup).
+     * Defaults to env-based NAIS GraphQL client when configured.
+     */
+    var naisTeamLookupProvider: () -> NaisTeamLookup? = {
+        NaisGraphQlClient.fromEnvOrNull()?.let { NaisGraphQlTeamLookup(it) }
+    }
+}
+
+/**
  * Route-scoped plugin that enforces team authorization.
  * 
  * Usage:
@@ -26,9 +49,9 @@ private val log = LoggerFactory.getLogger("TeamAuthorizationPlugin")
  * }
  * ```
  */
-val TeamAuthorizationPlugin = createRouteScopedPlugin("TeamAuthorization") {
+val TeamAuthorizationPlugin = createRouteScopedPlugin("TeamAuthorization", ::TeamAuthorizationConfig) {
 
-    val naisClient = NaisGraphQlClient.fromEnvOrNull()
+    val naisLookup = pluginConfig.naisTeamLookupProvider()
     
     on(AuthenticationChecked) { call ->
         val principal = call.principal<BrukerPrincipal>()
@@ -39,7 +62,7 @@ val TeamAuthorizationPlugin = createRouteScopedPlugin("TeamAuthorization") {
             return@on
         }
         
-        val authorizedTeams = resolveAuthorizedTeams(principal, naisClient)
+        val authorizedTeams = resolveAuthorizedTeams(principal, naisLookup)
         
         if (authorizedTeams.isEmpty()) {
             log.warn("TeamAuthorization: User ${principal.navIdent} has no authorized teams")
@@ -66,7 +89,9 @@ val TeamAuthorizationPlugin = createRouteScopedPlugin("TeamAuthorization") {
             ))
             return@on
         } else {
-            principal.getPrimaryTeam()!!
+            // Prefer the legacy primary team if it exists, otherwise pick a stable team from the resolved set.
+            principal.getPrimaryTeam()?.takeIf { it in authorizedTeams }
+                ?: authorizedTeams.sorted().first()
         }
         
         // Store in call attributes for route handlers
@@ -80,9 +105,9 @@ val TeamAuthorizationPlugin = createRouteScopedPlugin("TeamAuthorization") {
 
 private suspend fun resolveAuthorizedTeams(
     principal: BrukerPrincipal,
-    naisClient: NaisGraphQlClient?
+    naisLookup: NaisTeamLookup?
 ): Set<String> {
-    if (naisClient == null) {
+    if (naisLookup == null) {
         val teams = principal.getAuthorizedTeams()
         log.debug("NAIS API not configured, using AD group mapping. User ${principal.navIdent} authorized for teams: $teams")
         return teams
@@ -91,7 +116,7 @@ private suspend fun resolveAuthorizedTeams(
     val email = principal.email
 
     val teamsByEmail = if (!email.isNullOrBlank()) {
-        naisClient.getTeamSlugsForUser(email)
+        naisLookup.getTeamSlugsForUser(email)
     } else {
         log.warn("User ${principal.navIdent} has no email claim, cannot lookup teams via NAIS API")
         emptySet()
@@ -103,7 +128,7 @@ private suspend fun resolveAuthorizedTeams(
     } else {
         // Matches NAIS Console behavior: `me { ... on User { teams { ... }}}`.
         // Depending on NAIS API auth configuration, `me` might not be a User.
-        val viewerTeams = naisClient.getTeamSlugsForViewer()
+        val viewerTeams = naisLookup.getTeamSlugsForViewer()
         if (viewerTeams.isNotEmpty()) {
             log.info("Resolved teams from NAIS API (viewer query) for ${principal.navIdent}: $viewerTeams")
         }
