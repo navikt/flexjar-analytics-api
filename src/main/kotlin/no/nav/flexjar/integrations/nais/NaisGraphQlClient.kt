@@ -86,6 +86,7 @@ class NaisGraphQlClient private constructor(
     private val clock: Clock = Clock.systemUTC(),
     private val client: HttpClient = defaultHttpClient()
 ) {
+    private val userAgent: String = "flexjar-analytics-api"
     // Health tracking
     private val lastSuccessfulCall = AtomicReference<Instant?>(null)
     private val lastError = AtomicReference<String?>(null)
@@ -151,7 +152,9 @@ class NaisGraphQlClient private constructor(
         val response = try {
             client.post(graphqlUrl) {
                 contentType(ContentType.Application.Json)
+                header(HttpHeaders.UserAgent, userAgent)
                 header(HttpHeaders.Authorization, "Bearer $apiKey")
+                header("X-Api-Key", apiKey)
                 setBody(
                     GraphQlRequest(
                         query = USER_TEAMS_QUERY,
@@ -169,7 +172,14 @@ class NaisGraphQlClient private constructor(
 
         if (response.status != HttpStatusCode.OK) {
             val errorMsg = "NAIS GraphQL returned non-OK status: ${response.status}"
+            if (response.status == HttpStatusCode.Unauthorized || response.status == HttpStatusCode.Forbidden) {
+                val wwwAuthenticate = response.headers[HttpHeaders.WWWAuthenticate]
+                if (!wwwAuthenticate.isNullOrBlank()) {
+                    log.warn("$errorMsg (www-authenticate=$wwwAuthenticate)")
+                }
+            }
             recordError(errorMsg)
+            teamCache.set(email, setOf(ERROR_SENTINEL), CacheTtl.ERROR)
             return NaisApiResult.Error(errorMsg)
         }
 
@@ -177,12 +187,14 @@ class NaisGraphQlClient private constructor(
             response.body<GraphQlResponse<UserTeamsData>>()
         } catch (e: Exception) {
             recordError("Failed to parse NAIS GraphQL response for user teams", e)
+            teamCache.set(email, setOf(ERROR_SENTINEL), CacheTtl.ERROR)
             return NaisApiResult.Error("Response parsing failed", e)
         }
 
         if (!body.errors.isNullOrEmpty()) {
             val errorMsg = "NAIS GraphQL returned errors: ${body.errors.joinToString { it.message }}"
             recordError(errorMsg)
+            teamCache.set(email, setOf(ERROR_SENTINEL), CacheTtl.ERROR)
             return NaisApiResult.Error(errorMsg)
         }
 
@@ -232,7 +244,9 @@ class NaisGraphQlClient private constructor(
         val response = try {
             client.post(graphqlUrl) {
                 contentType(ContentType.Application.Json)
+                header(HttpHeaders.UserAgent, userAgent)
                 header(HttpHeaders.Authorization, "Bearer $apiKey")
+                header("X-Api-Key", apiKey)
                 setBody(GraphQlRequest(query = VIEWER_TEAMS_QUERY, variables = EmptyVariables()))
             }
         } catch (e: Exception) {
@@ -245,7 +259,14 @@ class NaisGraphQlClient private constructor(
 
         if (response.status != HttpStatusCode.OK) {
             val errorMsg = "NAIS GraphQL returned non-OK status: ${response.status}"
+            if (response.status == HttpStatusCode.Unauthorized || response.status == HttpStatusCode.Forbidden) {
+                val wwwAuthenticate = response.headers[HttpHeaders.WWWAuthenticate]
+                if (!wwwAuthenticate.isNullOrBlank()) {
+                    log.warn("$errorMsg (www-authenticate=$wwwAuthenticate)")
+                }
+            }
             recordError(errorMsg)
+            teamCache.set(viewerCacheKey, setOf(ERROR_SENTINEL), CacheTtl.ERROR)
             return NaisApiResult.Error(errorMsg)
         }
 
@@ -253,12 +274,14 @@ class NaisGraphQlClient private constructor(
             response.body<GraphQlResponse<ViewerTeamsData>>()
         } catch (e: Exception) {
             recordError("Failed to parse NAIS GraphQL response for viewer teams", e)
+            teamCache.set(viewerCacheKey, setOf(ERROR_SENTINEL), CacheTtl.ERROR)
             return NaisApiResult.Error("Response parsing failed", e)
         }
 
         if (!body.errors.isNullOrEmpty()) {
             val errorMsg = "NAIS GraphQL returned errors: ${body.errors.joinToString { it.message }}"
             recordError(errorMsg)
+            teamCache.set(viewerCacheKey, setOf(ERROR_SENTINEL), CacheTtl.ERROR)
             return NaisApiResult.Error(errorMsg)
         }
 
@@ -386,11 +409,19 @@ class NaisGraphQlClient private constructor(
          * - VALKEY_PASSWORD_FLEXJAR_CACHE: Valkey password
          */
         fun fromEnvOrNull(): NaisGraphQlClient? {
-            val url = System.getenv("NAIS_API_GRAPHQL_URL")?.takeIf { it.isNotBlank() }
-            val key = System.getenv("NAIS_API_KEY")?.takeIf { it.isNotBlank() }
+            // Support both our naming and the convention used by e.g. appsec-notifiers.
+            val urlFromPrimary = System.getenv("NAIS_API_GRAPHQL_URL")?.takeIf { it.isNotBlank() }
+            val urlFromFallback = System.getenv("NAIS_API_ENDPOINT")?.takeIf { it.isNotBlank() }
+            val url = urlFromPrimary ?: urlFromFallback
+
+            val keyFromPrimary = System.getenv("NAIS_API_KEY")?.takeIf { it.isNotBlank() }
+            val keyFromFallback = System.getenv("TEAMS_TOKEN")?.takeIf { it.isNotBlank() }
+            val key = keyFromPrimary ?: keyFromFallback
 
             if (url == null && key == null) {
-                log.debug("NAIS API integration not configured (NAIS_API_GRAPHQL_URL and NAIS_API_KEY not set)")
+                log.debug(
+                    "NAIS API integration not configured (NAIS_API_GRAPHQL_URL/NAIS_API_ENDPOINT and NAIS_API_KEY/TEAMS_TOKEN not set)"
+                )
                 return null
             }
 
@@ -404,7 +435,11 @@ class NaisGraphQlClient private constructor(
             // Create cache (Valkey if configured, otherwise in-memory)
             val teamCache = ValkeyTeamCache.fromEnvOrFallback()
             
-            log.info("NAIS API integration enabled (endpoint: ${url.take(50)}...)")
+            val urlSource = if (urlFromPrimary != null) "NAIS_API_GRAPHQL_URL" else "NAIS_API_ENDPOINT"
+            val keySource = if (keyFromPrimary != null) "NAIS_API_KEY" else "TEAMS_TOKEN"
+            log.info(
+                "NAIS API integration enabled (endpoint: ${url.take(50)}..., urlSource=$urlSource, keySource=$keySource, keyLength=${key.length}, cache=${teamCache::class.simpleName})"
+            )
             return NaisGraphQlClient(graphqlUrl = url, apiKey = key, teamCache = teamCache)
         }
         

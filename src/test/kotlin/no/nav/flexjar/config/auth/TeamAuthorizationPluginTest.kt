@@ -16,6 +16,7 @@ import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import no.nav.flexjar.config.AZURE_REALM
+import no.nav.flexjar.integrations.nais.NaisApiResult
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
@@ -26,8 +27,11 @@ private class FakeNaisTeamLookup(
     private val teamsByEmail: Set<String> = emptySet(),
     private val teamsByViewer: Set<String> = emptySet(),
 ) : NaisTeamLookup {
-    override suspend fun getTeamSlugsForUser(email: String): Set<String> = teamsByEmail
-    override suspend fun getTeamSlugsForViewer(): Set<String> = teamsByViewer
+    override suspend fun getTeamSlugsForUserResult(email: String): NaisApiResult<Set<String>> =
+        NaisApiResult.Success(teamsByEmail)
+
+    override suspend fun getTeamSlugsForViewerResult(): NaisApiResult<Set<String>> =
+        NaisApiResult.Success(teamsByViewer)
 }
 
 @Serializable

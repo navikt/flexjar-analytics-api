@@ -91,7 +91,7 @@ class NaisGraphQlClientTest {
     }
 
     @Test
-    fun `getTeamSlugsForUser sends expected query, variables, and X-Api-Key header`() = runBlocking {
+    fun `getTeamSlugsForUser sends expected query, variables, and auth headers`() = runBlocking {
         val responseJson = """{"data":{"user":{"teams":{"nodes":[]}}}}"""
 
         var observedEmail: String? = null
@@ -102,6 +102,12 @@ class NaisGraphQlClientTest {
 
             val observedAuth = request.headers[HttpHeaders.Authorization]
             assertEquals("Bearer $testApiKey", observedAuth)
+
+            val observedApiKey = request.headers["X-Api-Key"]
+            assertEquals(testApiKey, observedApiKey)
+
+            val observedUserAgent = request.headers[HttpHeaders.UserAgent]
+            assertEquals("flexjar-analytics-api", observedUserAgent)
 
             val contentType = request.headers[HttpHeaders.ContentType]
                 ?: (request.body as? OutgoingContent)?.contentType?.toString()
@@ -144,7 +150,7 @@ class NaisGraphQlClientTest {
     }
 
     @Test
-    fun `getTeamSlugsForViewer sends expected query and X-Api-Key header`() = runBlocking {
+    fun `getTeamSlugsForViewer sends expected query and auth headers`() = runBlocking {
         val responseJson = """{"data":{"me":{"__typename":"User","teams":{"nodes":[]}}}}"""
 
         var observedQuery: String? = null
@@ -154,6 +160,12 @@ class NaisGraphQlClientTest {
 
             val observedAuth = request.headers[HttpHeaders.Authorization]
             assertEquals("Bearer $testApiKey", observedAuth)
+
+            val observedApiKey = request.headers["X-Api-Key"]
+            assertEquals(testApiKey, observedApiKey)
+
+            val observedUserAgent = request.headers[HttpHeaders.UserAgent]
+            assertEquals("flexjar-analytics-api", observedUserAgent)
 
             val contentType = request.headers[HttpHeaders.ContentType]
                 ?: (request.body as? OutgoingContent)?.contentType?.toString()
