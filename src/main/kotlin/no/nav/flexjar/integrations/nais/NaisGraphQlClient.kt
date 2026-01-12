@@ -155,7 +155,6 @@ class NaisGraphQlClient private constructor(
                 contentType(ContentType.Application.Json)
                 header(HttpHeaders.UserAgent, userAgent)
                 header(HttpHeaders.Authorization, "Bearer $apiKey")
-                header("X-Api-Key", apiKey)
                 setBody(
                     GraphQlRequest(
                         query = USER_TEAMS_QUERY,
@@ -255,7 +254,6 @@ class NaisGraphQlClient private constructor(
                 contentType(ContentType.Application.Json)
                 header(HttpHeaders.UserAgent, userAgent)
                 header(HttpHeaders.Authorization, "Bearer $apiKey")
-                header("X-Api-Key", apiKey)
                 setBody(GraphQlRequest(query = VIEWER_TEAMS_QUERY, variables = EmptyVariables()))
             }
         } catch (e: Exception) {
