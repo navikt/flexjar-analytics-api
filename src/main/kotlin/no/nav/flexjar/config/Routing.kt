@@ -13,6 +13,7 @@ import no.nav.flexjar.routes.surveyFacetRoutes
 import no.nav.flexjar.routes.statsRoutes
 import no.nav.flexjar.routes.internalRoutes
 import no.nav.flexjar.routes.submissionRoutes
+import no.nav.flexjar.routes.teamsRoutes
 
 fun Application.configureRouting() {
     install(io.ktor.server.resources.Resources)
@@ -39,6 +40,7 @@ fun Application.configureRouting() {
             statsRoutes()
             exportRoutes()
             discoveryRoutes()
+            teamsRoutes()
         }
     }
 }

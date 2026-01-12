@@ -10,6 +10,8 @@ class ApiV1Intern {
     @Serializable
     class Feedback(
         val parent: ApiV1Intern = ApiV1Intern(),
+        /** Optional team scope. If omitted, the backend selects a default authorized team. */
+        val team: String? = null,
         val app: String? = null,
         val page: Int? = null,
         val size: Int? = null,
@@ -62,6 +64,8 @@ class ApiV1Intern {
     @Serializable
     class Stats(
         val parent: ApiV1Intern = ApiV1Intern(),
+        /** Optional team scope. If omitted, the backend selects a default authorized team. */
+        val team: String? = null,
         val app: String? = null,
         /** Start date (YYYY-MM-DD, Europe/Oslo inclusive) */
         val fromDate: String? = null,
@@ -113,6 +117,8 @@ class ApiV1Intern {
     @Serializable
     class Themes(
         val parent: ApiV1Intern = ApiV1Intern(),
+        /** Optional team scope. If omitted, the backend selects a default authorized team. */
+        val team: String? = null,
         /** Optional theme context filter (GENERAL_FEEDBACK | BLOCKER) */
         val context: String? = null
     ) {
@@ -123,7 +129,11 @@ class ApiV1Intern {
 
     @Resource("surveys")
     @Serializable
-    class Surveys(val parent: ApiV1Intern = ApiV1Intern()) {
+    class Surveys(
+        val parent: ApiV1Intern = ApiV1Intern(),
+        /** Optional team scope. If omitted, the backend selects a default authorized team. */
+        val team: String? = null,
+    ) {
         @Resource("{surveyId}")
         @Serializable
         class Id(
@@ -159,13 +169,33 @@ class ApiV1Intern {
     class Filters(val parent: ApiV1Intern = ApiV1Intern()) {
         @Resource("bootstrap")
         @Serializable
-        class Bootstrap(val parent: Filters = Filters())
+        class Bootstrap(
+            val parent: Filters = Filters(),
+            /** Optional team scope. If omitted, the backend selects a default authorized team. */
+            val team: String? = null,
+        )
     }
+
+    /**
+     * Returns the teams the user is authorized for, along with the apps seen in each team.
+     *
+     * Query param `team` is accepted for consistency (and to drive authorization scope),
+     * but the response includes all authorized teams.
+     */
+    @Resource("teams")
+    @Serializable
+    class Teams(
+        val parent: ApiV1Intern = ApiV1Intern(),
+        /** Optional team scope. If omitted, the backend selects a default authorized team. */
+        val team: String? = null,
+    )
 
     @Resource("export")
     @Serializable
     class Export(
         val parent: ApiV1Intern = ApiV1Intern(),
+        /** Optional team scope. If omitted, the backend selects a default authorized team. */
+        val team: String? = null,
         val format: String = "CSV",
         val app: String? = null,
         val hasText: Boolean? = null,

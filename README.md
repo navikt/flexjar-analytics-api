@@ -39,7 +39,8 @@ docker run -d --name flexjar-db \
 | `POST /api/v1/intern/feedback/{id}/tags` | Add tag |
 | `DELETE /api/v1/intern/feedback/{id}/tags?tag=X` | Remove tag |
 | `GET /api/v1/intern/feedback/tags` | List all tags |
-| `GET /api/v1/intern/feedback/teams` | List teams and apps |
+| `GET /api/v1/intern/teams` | List authorized teams and apps |
+| `GET /api/v1/intern/feedback/teams` | List apps for the currently selected team |
 | `DELETE /api/v1/intern/surveys/{surveyId}` | Delete all feedback for a survey |
 | `GET /api/v1/intern/stats` | Get statistics |
 | `GET /api/v1/intern/stats/ratings` | Rating distribution |
@@ -48,19 +49,29 @@ docker run -d --name flexjar-db \
 
 ### Query Parameters
 
+All endpoints under `/api/v1/intern/*` are **team-scoped**.
+
+- `team` is an **optional** query parameter.
+- If `team` is omitted, the backend picks a default authorized team (primary team if present; otherwise a stable choice).
+- If `team` is provided but not authorized, the backend returns **403**.
+- Route handlers always use `call.authorizedTeam` (validated by `TeamAuthorizationPlugin`).
+
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `team` | string | `flex` | Filter by team |
+| `team` | string | (selected by backend) | Team scope for the request |
 | `app` | string | - | Filter by app |
-| `from` | ISO date | - | Start date |
-| `to` | ISO date | - | End date |
+| `fromDate` | `YYYY-MM-DD` | - | Start date (Europe/Oslo, inclusive) |
+| `toDate` | `YYYY-MM-DD` | - | End date (Europe/Oslo, inclusive) |
 | `surveyId` | string | - | Filter by survey ID |
-| `medTekst` | boolean | `false` | Only with text feedback |
-| `stjerne` | boolean | `false` | Only starred |
-| `tags` | string | - | Comma-separated tags |
-| `fritekst` | string | - | Free text search |
-| `page` | int | last | Page number (0-indexed) |
+| `hasText` | boolean | `false` | Only include feedback with text responses |
+| `lowRating` | boolean | `false` | Only include low ratings (1-2) |
+| `tag` | string[] | - | Repeated `tag=foo&tag=bar` (also accepts comma-separated values per entry) |
+| `query` | string | - | Full-text search query |
+| `page` | int | `0` | Page number (0-indexed) |
 | `size` | int | `10` | Page size |
+| `deviceType` | string | - | `mobile`, `tablet`, `desktop` |
+| `segment` | string[] | - | Repeated `segment=key:value` |
+| `task` | string | - | Top Tasks drill-down filter (matches option label) |
 
 ### Submission (For Widget)
 
