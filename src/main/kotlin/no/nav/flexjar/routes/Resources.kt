@@ -140,6 +140,16 @@ class ApiV1Intern {
                 val task: String? = null,
                 /** Segment filter - repeated params like segment=key:value */
                 val segment: List<String>? = null,
+                /** Start date (YYYY-MM-DD, Europe/Oslo inclusive) */
+                val fromDate: String? = null,
+                /** End date (YYYY-MM-DD, Europe/Oslo inclusive) */
+                val toDate: String? = null,
+                /** Device type filter: mobile, tablet, desktop */
+                val deviceType: String? = null,
+                /** Filter for feedback with text responses */
+                val hasText: Boolean? = null,
+                /** Filter for low ratings (1-2) */
+                val lowRating: Boolean? = null,
             )
         }
     }

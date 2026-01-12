@@ -13,6 +13,8 @@ import no.nav.flexjar.domain.FieldType
 import no.nav.flexjar.domain.FeedbackQuery
 import no.nav.flexjar.domain.StatsQuery
 import no.nav.flexjar.insertTestFeedback
+import java.sql.Timestamp
+import java.time.Instant
 import java.util.UUID
 
 class FeedbackRepositoryTest : FunSpec({
@@ -189,6 +191,136 @@ class FeedbackRepositoryTest : FunSpec({
             feedback.shouldNotBeNull()
         }
     }
+
+        context("findContextTagsForSurvey") {
+                fun insertTestFeedbackWithJson(
+                        id: String = UUID.randomUUID().toString(),
+                        team: String = "team-test",
+                        app: String = "app-test",
+                        feedbackJson: String,
+                        opprettet: Timestamp = Timestamp.from(Instant.now()),
+                ) {
+                        TestDatabase.dataSource.connection.use { conn ->
+                                conn.prepareStatement(
+                                        """
+                                        INSERT INTO feedback (id, opprettet, feedback_json, team, app, tags)
+                                        VALUES (?, ?, ?::jsonb, ?, ?, ?)
+                                        """.trimIndent()
+                                ).use { stmt ->
+                                        stmt.setString(1, id)
+                                        stmt.setObject(2, opprettet)
+                                        stmt.setString(3, feedbackJson)
+                                        stmt.setString(4, team)
+                                        stmt.setString(5, app)
+                                        stmt.setString(6, null)
+                                        stmt.executeUpdate()
+                                }
+                                conn.commit()
+                        }
+                }
+
+                test("honors segments/date/device/hasText/lowRating") {
+                        val surveyId = "survey-ctx-filters-repo-1"
+                        val tsInRange = Timestamp.from(Instant.parse("2026-01-01T12:00:00Z"))
+                        val tsOutOfRange = Timestamp.from(Instant.parse("2026-01-02T12:00:00Z"))
+
+                        insertTestFeedbackWithJson(
+                                team = "team-test",
+                                app = "app-test",
+                                opprettet = tsInRange,
+                                feedbackJson = """
+                                        {
+                                            "surveyId": "$surveyId",
+                                            "context": {
+                                                "deviceType": "mobile",
+                                                "tags": {"harAktivSykmelding": "Ja"}
+                                            },
+                                            "answers": [
+                                                {"fieldId": "rating", "fieldType": "RATING", "question": {"label": "Hvordan?"}, "value": {"type": "rating", "rating": 2}},
+                                                {"fieldId": "text", "fieldType": "TEXT", "question": {"label": "Hvorfor?"}, "value": {"type": "text", "text": "Bra nok"}}
+                                            ]
+                                        }
+                                """.trimIndent(),
+                        )
+
+                        // Wrong segment
+                        insertTestFeedbackWithJson(
+                                team = "team-test",
+                                app = "app-test",
+                                opprettet = tsInRange,
+                                feedbackJson = """
+                                        {
+                                            "surveyId": "$surveyId",
+                                            "context": {
+                                                "deviceType": "mobile",
+                                                "tags": {"harAktivSykmelding": "Nei"}
+                                            },
+                                            "answers": [
+                                                {"fieldId": "rating", "fieldType": "RATING", "question": {"label": "Hvordan?"}, "value": {"type": "rating", "rating": 2}},
+                                                {"fieldId": "text", "fieldType": "TEXT", "question": {"label": "Hvorfor?"}, "value": {"type": "text", "text": "Ulik segment"}}
+                                            ]
+                                        }
+                                """.trimIndent(),
+                        )
+
+                        // Out of date range
+                        insertTestFeedbackWithJson(
+                                team = "team-test",
+                                app = "app-test",
+                                opprettet = tsOutOfRange,
+                                feedbackJson = """
+                                        {
+                                            "surveyId": "$surveyId",
+                                            "context": {
+                                                "deviceType": "mobile",
+                                                "tags": {"harAktivSykmelding": "Ja"}
+                                            },
+                                            "answers": [
+                                                {"fieldId": "rating", "fieldType": "RATING", "question": {"label": "Hvordan?"}, "value": {"type": "rating", "rating": 2}},
+                                                {"fieldId": "text", "fieldType": "TEXT", "question": {"label": "Hvorfor?"}, "value": {"type": "text", "text": "Utenfor"}}
+                                            ]
+                                        }
+                                """.trimIndent(),
+                        )
+
+                        // Wrong device and no text
+                        insertTestFeedbackWithJson(
+                                team = "team-test",
+                                app = "app-test",
+                                opprettet = tsInRange,
+                                feedbackJson = """
+                                        {
+                                            "surveyId": "$surveyId",
+                                            "context": {
+                                                "deviceType": "desktop",
+                                                "tags": {"harAktivSykmelding": "Ja"}
+                                            },
+                                            "answers": [
+                                                {"fieldId": "rating", "fieldType": "RATING", "question": {"label": "Hvordan?"}, "value": {"type": "rating", "rating": 2}},
+                                                {"fieldId": "text", "fieldType": "TEXT", "question": {"label": "Hvorfor?"}, "value": {"type": "text", "text": ""}}
+                                            ]
+                                        }
+                                """.trimIndent(),
+                        )
+
+                        val result = repository.findContextTagsForSurvey(
+                                surveyId = surveyId,
+                                team = "team-test",
+                                segments = listOf("harAktivSykmelding" to "Ja"),
+                                fromDate = "2026-01-01",
+                                toDate = "2026-01-01",
+                                deviceType = "mobile",
+                                hasText = true,
+                                lowRating = true,
+                        )
+
+                        result.keys shouldContain "harAktivSykmelding"
+                        val values = result["harAktivSykmelding"].shouldNotBeNull()
+                        values shouldHaveSize 1
+                        values.first().value shouldBe "Ja"
+                        values.first().count shouldBe 1
+                }
+        }
 
 
 })

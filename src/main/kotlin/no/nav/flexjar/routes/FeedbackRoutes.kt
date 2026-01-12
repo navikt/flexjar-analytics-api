@@ -190,6 +190,11 @@ fun Route.surveyFacetRoutes(service: FeedbackService = defaultFeedbackService) {
             team = team,
             task = params.task,
             segments = segments,
+            fromDate = params.fromDate,
+            toDate = params.toDate,
+            deviceType = params.deviceType,
+            hasText = params.hasText ?: false,
+            lowRating = params.lowRating ?: false,
         )
 
         val maxCard = params.maxCardinality

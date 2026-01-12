@@ -359,14 +359,57 @@ class FeedbackRepository {
         team: String,
         task: String? = null,
         segments: List<Pair<String, String>> = emptyList(),
+        fromDate: String? = null,
+        toDate: String? = null,
+        deviceType: String? = null,
+        hasText: Boolean = false,
+        lowRating: Boolean = false,
     ): Map<String, List<MetadataValueWithCount>> {
         return transaction {
             if (task.isNullOrBlank()) {
-                val segmentClauses = segments
-                    .map { (key, _) ->
-                        // Uses ->> to compare string values
-                        "AND feedback_json::json->'context'->'tags'->> ? = ?"
-                    }
+                // Build dynamic filter clauses
+                val filterClauses = mutableListOf<String>()
+                val filterArgs = mutableListOf<Pair<IColumnType<*>, Any>>()
+
+                // Base args: team and surveyId
+                filterArgs.add(VarCharColumnType() to team)
+                filterArgs.add(VarCharColumnType() to surveyId)
+
+                // Segment filters
+                for ((key, value) in segments) {
+                    val safeKey = key.trim()
+                    val safeValue = value.trim()
+                    if (safeKey.isBlank() || safeValue.isBlank()) continue
+                    filterClauses.add("AND feedback_json::json->'context'->'tags'->>? = ?")
+                    filterArgs.add(VarCharColumnType() to safeKey)
+                    filterArgs.add(VarCharColumnType() to safeValue)
+                }
+
+                // Date range filter (Europe/Oslo)
+                if (!fromDate.isNullOrBlank()) {
+                    filterClauses.add("AND opprettet >= (? || ' 00:00:00 Europe/Oslo')::timestamptz")
+                    filterArgs.add(VarCharColumnType() to fromDate)
+                }
+                if (!toDate.isNullOrBlank()) {
+                    filterClauses.add("AND opprettet < ((? || ' 00:00:00 Europe/Oslo')::timestamptz + interval '1 day')")
+                    filterArgs.add(VarCharColumnType() to toDate)
+                }
+
+                // Device type filter
+                if (!deviceType.isNullOrBlank()) {
+                    filterClauses.add("AND feedback_json::json->'context'->>'deviceType' = ?")
+                    filterArgs.add(VarCharColumnType() to deviceType)
+                }
+
+                // Has text filter
+                if (hasText) {
+                    filterClauses.add("AND jsonb_path_exists(feedback_json::jsonb, '\$.answers[*] ? (@.value.type == \"text\" && @.value.text != \"\")')")
+                }
+
+                // Low rating filter (1-2)
+                if (lowRating) {
+                    filterClauses.add("AND (jsonb_path_query_first(feedback_json::jsonb, '\$.answers[*] ? (@.value.type == \"rating\").value.rating')::text)::int <= 2")
+                }
 
                 val sql = buildString {
                     append(
@@ -383,9 +426,9 @@ class FeedbackRepository {
                     """.trimIndent()
                     )
 
-                    if (segmentClauses.isNotEmpty()) {
+                    if (filterClauses.isNotEmpty()) {
                         append("\n")
-                        append(segmentClauses.joinToString("\n"))
+                        append(filterClauses.joinToString("\n"))
                     }
 
                     append("\n")
@@ -398,20 +441,7 @@ class FeedbackRepository {
 
                 val result = mutableMapOf<String, MutableList<MetadataValueWithCount>>()
 
-                val args = buildList {
-                    add(VarCharColumnType() to team)
-                    add(VarCharColumnType() to surveyId)
-
-                    for ((key, value) in segments) {
-                        val safeKey = key.trim()
-                        val safeValue = value.trim()
-                        if (safeKey.isBlank() || safeValue.isBlank()) continue
-                        add(VarCharColumnType() to safeKey)
-                        add(VarCharColumnType() to safeValue)
-                    }
-                }
-
-                exec(sql, args) { rs ->
+                exec(sql, filterArgs) { rs ->
                     while (rs.next()) {
                         val key = rs.getString("tag_key") ?: continue
                         val value = rs.getString("tag_value") ?: continue
@@ -427,6 +457,7 @@ class FeedbackRepository {
                 }
             }
 
+            // Task filter path (for Top Tasks drill-down) - less common, keep simpler approach
             val dbQuery = FeedbackTable.selectAll()
             dbQuery.andWhere { FeedbackTable.team eq team }
             dbQuery.andWhere { JsonExtract(FeedbackTable.feedbackJson, listOf("surveyId")) eq surveyId }

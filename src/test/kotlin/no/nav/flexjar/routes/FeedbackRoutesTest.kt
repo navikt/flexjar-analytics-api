@@ -5,6 +5,7 @@ import io.kotest.matchers.shouldBe
 import io.kotest.matchers.maps.shouldContainKey
 import io.kotest.matchers.nulls.shouldNotBeNull
 import io.kotest.matchers.string.shouldContain
+import io.kotest.matchers.string.shouldNotContain
 import io.ktor.client.request.*
 import io.ktor.client.statement.*
 import io.ktor.http.*
@@ -12,6 +13,7 @@ import io.ktor.server.testing.*
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.int
 import no.nav.flexjar.TestDatabase
 import no.nav.flexjar.createTestClient
@@ -27,6 +29,7 @@ class FeedbackRoutesTest : FunSpec({
         team: String = "team-test",
         app: String = "app-test",
         feedbackJson: String,
+        opprettet: Timestamp = Timestamp.from(java.time.Instant.now()),
     ) {
         TestDatabase.dataSource.connection.use { conn ->
             conn.prepareStatement(
@@ -36,7 +39,7 @@ class FeedbackRoutesTest : FunSpec({
                 """.trimIndent()
             ).use { stmt ->
                 stmt.setString(1, id)
-                stmt.setObject(2, Timestamp.from(java.time.Instant.now()))
+                stmt.setObject(2, opprettet)
                 stmt.setString(3, feedbackJson)
                 stmt.setString(4, team)
                 stmt.setString(5, app)
@@ -304,6 +307,189 @@ class FeedbackRoutesTest : FunSpec({
             valuesText shouldContain "\"count\":1"
         }
     }
+
+        test("GET /api/v1/intern/surveys/{surveyId}/context-tags honors date/device/hasText/lowRating filters") {
+                testApplication {
+                        application { testModule() }
+
+                        val surveyId = "survey-ctx-filters-1"
+                        val tsInRange = Timestamp.from(java.time.Instant.parse("2026-01-01T12:00:00Z"))
+                        val tsOutOfRange = Timestamp.from(java.time.Instant.parse("2026-01-02T12:00:00Z"))
+
+                        // Only this row should match all filters below (mobile, hasText, lowRating, date)
+                        insertTestFeedbackWithJson(
+                                team = "team-test",
+                                app = "app-test",
+                                opprettet = tsInRange,
+                                feedbackJson = """
+                                        {
+                                            "surveyId": "$surveyId",
+                                            "context": {
+                                                "deviceType": "mobile",
+                                                "tags": {"harAktivSykmelding": "Ja"}
+                                            },
+                                            "answers": [
+                                                {"fieldId": "rating", "fieldType": "RATING", "question": {"label": "Hvordan?"}, "value": {"type": "rating", "rating": 2}},
+                                                {"fieldId": "text", "fieldType": "TEXT", "question": {"label": "Hvorfor?"}, "value": {"type": "text", "text": "Bra nok"}}
+                                            ]
+                                        }
+                                """.trimIndent(),
+                        )
+
+                        // Same date, low rating, but wrong deviceType
+                        insertTestFeedbackWithJson(
+                                team = "team-test",
+                                app = "app-test",
+                                opprettet = tsInRange,
+                                feedbackJson = """
+                                        {
+                                            "surveyId": "$surveyId",
+                                            "context": {
+                                                "deviceType": "desktop",
+                                                "tags": {"harAktivSykmelding": "Ja"}
+                                            },
+                                            "answers": [
+                                                {"fieldId": "rating", "fieldType": "RATING", "question": {"label": "Hvordan?"}, "value": {"type": "rating", "rating": 1}},
+                                                {"fieldId": "text", "fieldType": "TEXT", "question": {"label": "Hvorfor?"}, "value": {"type": "text", "text": ""}}
+                                            ]
+                                        }
+                                """.trimIndent(),
+                        )
+
+                        // Out of date range
+                        insertTestFeedbackWithJson(
+                                team = "team-test",
+                                app = "app-test",
+                                opprettet = tsOutOfRange,
+                                feedbackJson = """
+                                        {
+                                            "surveyId": "$surveyId",
+                                            "context": {
+                                                "deviceType": "mobile",
+                                                "tags": {"harAktivSykmelding": "Nei"}
+                                            },
+                                            "answers": [
+                                                {"fieldId": "rating", "fieldType": "RATING", "question": {"label": "Hvordan?"}, "value": {"type": "rating", "rating": 2}},
+                                                {"fieldId": "text", "fieldType": "TEXT", "question": {"label": "Hvorfor?"}, "value": {"type": "text", "text": "Utenfor"}}
+                                            ]
+                                        }
+                                """.trimIndent(),
+                        )
+
+                        val response = createTestClient().get(
+                                "/api/v1/intern/surveys/$surveyId/context-tags?maxCardinality=10&team=team-test&fromDate=2026-01-01&toDate=2026-01-01&deviceType=mobile&hasText=true&lowRating=true"
+                        ) {
+                                header(HttpHeaders.Authorization, "Bearer test-token")
+                        }
+
+                        response.status shouldBe HttpStatusCode.OK
+
+                        val json = Json { ignoreUnknownKeys = true }
+                        val body = json.parseToJsonElement(response.bodyAsText()).jsonObject
+                        val contextTags = body["contextTags"].shouldNotBeNull().jsonObject
+                        val values = contextTags["harAktivSykmelding"].shouldNotBeNull()
+                        val valuesText = values.toString()
+                        valuesText shouldContain "\"value\":\"Ja\""
+                        valuesText shouldContain "\"count\":1"
+                        valuesText shouldNotContain "\"value\":\"Nei\""
+                }
+        }
+
+        test("GET /api/v1/intern/surveys/{surveyId}/context-tags returns stable ordering by count desc then value") {
+                testApplication {
+                        application { testModule() }
+
+                        val surveyId = "survey-ctx-order-1"
+
+                        // k=A count 2, k=B count 2 (tie), k=C count 1
+                        insertTestFeedbackWithJson(
+                                team = "team-test",
+                                app = "app-test",
+                                feedbackJson = """
+                                        {
+                                            "surveyId": "$surveyId",
+                                            "context": {"tags": {"k": "B"}},
+                                            "answers": [
+                                                {"fieldId": "rating", "fieldType": "RATING", "question": {"label": "Hvordan?"}, "value": {"type": "rating", "rating": 4}}
+                                            ]
+                                        }
+                                """.trimIndent(),
+                        )
+                        insertTestFeedbackWithJson(
+                                team = "team-test",
+                                app = "app-test",
+                                feedbackJson = """
+                                        {
+                                            "surveyId": "$surveyId",
+                                            "context": {"tags": {"k": "B"}},
+                                            "answers": [
+                                                {"fieldId": "rating", "fieldType": "RATING", "question": {"label": "Hvordan?"}, "value": {"type": "rating", "rating": 5}}
+                                            ]
+                                        }
+                                """.trimIndent(),
+                        )
+                        insertTestFeedbackWithJson(
+                                team = "team-test",
+                                app = "app-test",
+                                feedbackJson = """
+                                        {
+                                            "surveyId": "$surveyId",
+                                            "context": {"tags": {"k": "A"}},
+                                            "answers": [
+                                                {"fieldId": "rating", "fieldType": "RATING", "question": {"label": "Hvordan?"}, "value": {"type": "rating", "rating": 4}}
+                                            ]
+                                        }
+                                """.trimIndent(),
+                        )
+                        insertTestFeedbackWithJson(
+                                team = "team-test",
+                                app = "app-test",
+                                feedbackJson = """
+                                        {
+                                            "surveyId": "$surveyId",
+                                            "context": {"tags": {"k": "A"}},
+                                            "answers": [
+                                                {"fieldId": "rating", "fieldType": "RATING", "question": {"label": "Hvordan?"}, "value": {"type": "rating", "rating": 5}}
+                                            ]
+                                        }
+                                """.trimIndent(),
+                        )
+                        insertTestFeedbackWithJson(
+                                team = "team-test",
+                                app = "app-test",
+                                feedbackJson = """
+                                        {
+                                            "surveyId": "$surveyId",
+                                            "context": {"tags": {"k": "C"}},
+                                            "answers": [
+                                                {"fieldId": "rating", "fieldType": "RATING", "question": {"label": "Hvordan?"}, "value": {"type": "rating", "rating": 3}}
+                                            ]
+                                        }
+                                """.trimIndent(),
+                        )
+
+                        val response = createTestClient().get(
+                                "/api/v1/intern/surveys/$surveyId/context-tags?maxCardinality=10&team=team-test"
+                        ) {
+                                header(HttpHeaders.Authorization, "Bearer test-token")
+                        }
+
+                        response.status shouldBe HttpStatusCode.OK
+
+                        val json = Json { ignoreUnknownKeys = true }
+                        val body = json.parseToJsonElement(response.bodyAsText()).jsonObject
+                        val contextTags = body["contextTags"].shouldNotBeNull().jsonObject
+                        val values = contextTags["k"].shouldNotBeNull().jsonArray
+
+                        // Order: count desc, then value asc => A(2), B(2), C(1)
+                        values[0].jsonObject["value"]?.jsonPrimitive?.content shouldBe "A"
+                        values[0].jsonObject["count"]?.jsonPrimitive?.int shouldBe 2
+                        values[1].jsonObject["value"]?.jsonPrimitive?.content shouldBe "B"
+                        values[1].jsonObject["count"]?.jsonPrimitive?.int shouldBe 2
+                        values[2].jsonObject["value"]?.jsonPrimitive?.content shouldBe "C"
+                        values[2].jsonObject["count"]?.jsonPrimitive?.int shouldBe 1
+                }
+        }
 
     test("DELETE /api/v1/intern/surveys/{surveyId} deletes all feedback for survey and returns count") {
         testApplication {

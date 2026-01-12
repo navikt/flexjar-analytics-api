@@ -349,6 +349,36 @@ paths:
           style: form
           explode: true
           description: Segment filter (repeat params like segment=key:value)
+        - name: fromDate
+          in: query
+          schema:
+            type: string
+            format: date
+          description: Start date (YYYY-MM-DD, Europe/Oslo inclusive)
+        - name: toDate
+          in: query
+          schema:
+            type: string
+            format: date
+          description: End date (YYYY-MM-DD, Europe/Oslo inclusive)
+        - name: deviceType
+          in: query
+          schema:
+            type: string
+            enum: [mobile, tablet, desktop]
+          description: Filter by device type
+        - name: hasText
+          in: query
+          schema:
+            type: boolean
+            default: false
+          description: Only include feedback with text responses
+        - name: lowRating
+          in: query
+          schema:
+            type: boolean
+            default: false
+          description: Only include low ratings (1-2)
       responses:
         '200':
           description: Context tags
