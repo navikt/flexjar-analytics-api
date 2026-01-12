@@ -9,6 +9,7 @@ import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.client.request.header
 import io.ktor.client.request.post
 import io.ktor.client.request.setBody
+import io.ktor.client.statement.bodyAsText
 import io.ktor.http.ContentType
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
@@ -172,11 +173,19 @@ class NaisGraphQlClient private constructor(
 
         if (response.status != HttpStatusCode.OK) {
             val errorMsg = "NAIS GraphQL returned non-OK status: ${response.status}"
+            val bodySnippet = try {
+                response.bodyAsText().take(500)
+            } catch (_: Exception) {
+                null
+            }
             if (response.status == HttpStatusCode.Unauthorized || response.status == HttpStatusCode.Forbidden) {
                 val wwwAuthenticate = response.headers[HttpHeaders.WWWAuthenticate]
                 if (!wwwAuthenticate.isNullOrBlank()) {
                     log.warn("$errorMsg (www-authenticate=$wwwAuthenticate)")
                 }
+            }
+            if (!bodySnippet.isNullOrBlank()) {
+                log.warn("$errorMsg (body=${bodySnippet.replace("\n", " ")})")
             }
             recordError(errorMsg)
             teamCache.set(email, setOf(ERROR_SENTINEL), CacheTtl.ERROR)
@@ -259,11 +268,19 @@ class NaisGraphQlClient private constructor(
 
         if (response.status != HttpStatusCode.OK) {
             val errorMsg = "NAIS GraphQL returned non-OK status: ${response.status}"
+            val bodySnippet = try {
+                response.bodyAsText().take(500)
+            } catch (_: Exception) {
+                null
+            }
             if (response.status == HttpStatusCode.Unauthorized || response.status == HttpStatusCode.Forbidden) {
                 val wwwAuthenticate = response.headers[HttpHeaders.WWWAuthenticate]
                 if (!wwwAuthenticate.isNullOrBlank()) {
                     log.warn("$errorMsg (www-authenticate=$wwwAuthenticate)")
                 }
+            }
+            if (!bodySnippet.isNullOrBlank()) {
+                log.warn("$errorMsg (body=${bodySnippet.replace("\n", " ")})")
             }
             recordError(errorMsg)
             teamCache.set(viewerCacheKey, setOf(ERROR_SENTINEL), CacheTtl.ERROR)
@@ -365,6 +382,13 @@ class NaisGraphQlClient private constructor(
     }
 
     companion object {
+        private fun tokenFormat(token: String): String {
+            // Avoid logging secrets; only log broad format.
+            // JWTs usually have 2 dots (header.payload.signature).
+            val dotCount = token.count { it == '.' }
+            return if (dotCount >= 2) "jwt" else "opaque"
+        }
+
         private val USER_TEAMS_QUERY = """
             query UserTeams(${'$'}email: String) {
                 user(email: ${'$'}email) {
@@ -410,12 +434,12 @@ class NaisGraphQlClient private constructor(
          */
         fun fromEnvOrNull(): NaisGraphQlClient? {
             // Support both our naming and the convention used by e.g. appsec-notifiers.
-            val urlFromPrimary = System.getenv("NAIS_API_GRAPHQL_URL")?.takeIf { it.isNotBlank() }
-            val urlFromFallback = System.getenv("NAIS_API_ENDPOINT")?.takeIf { it.isNotBlank() }
+            val urlFromPrimary = System.getenv("NAIS_API_GRAPHQL_URL")?.trim()?.takeIf { it.isNotBlank() }
+            val urlFromFallback = System.getenv("NAIS_API_ENDPOINT")?.trim()?.takeIf { it.isNotBlank() }
             val url = urlFromPrimary ?: urlFromFallback
 
-            val keyFromPrimary = System.getenv("NAIS_API_KEY")?.takeIf { it.isNotBlank() }
-            val keyFromFallback = System.getenv("TEAMS_TOKEN")?.takeIf { it.isNotBlank() }
+            val keyFromPrimary = System.getenv("NAIS_API_KEY")?.trim()?.takeIf { it.isNotBlank() }
+            val keyFromFallback = System.getenv("TEAMS_TOKEN")?.trim()?.takeIf { it.isNotBlank() }
             val key = keyFromPrimary ?: keyFromFallback
 
             if (url == null && key == null) {
@@ -438,7 +462,7 @@ class NaisGraphQlClient private constructor(
             val urlSource = if (urlFromPrimary != null) "NAIS_API_GRAPHQL_URL" else "NAIS_API_ENDPOINT"
             val keySource = if (keyFromPrimary != null) "NAIS_API_KEY" else "TEAMS_TOKEN"
             log.info(
-                "NAIS API integration enabled (endpoint: ${url.take(50)}..., urlSource=$urlSource, keySource=$keySource, keyLength=${key.length}, cache=${teamCache::class.simpleName})"
+                "NAIS API integration enabled (endpoint: ${url.take(50)}..., urlSource=$urlSource, keySource=$keySource, keyLength=${key.length}, keyFormat=${tokenFormat(key)}, cache=${teamCache::class.simpleName})"
             )
             return NaisGraphQlClient(graphqlUrl = url, apiKey = key, teamCache = teamCache)
         }
