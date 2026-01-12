@@ -47,6 +47,9 @@ spec:
       rules:
         - application: flexjar-analytics
         - application: bro-frontend
+    outbound:
+      external:
+        - host: console.nav.cloud.nais.io
   gcp:
     sqlInstances:
       - type: POSTGRES_17

@@ -100,8 +100,8 @@ class NaisGraphQlClientTest {
         val mockEngine = MockEngine { request ->
             assertTrue(request.url.toString().startsWith(testUrl))
 
-            val observedApiKey = request.headers["X-Api-Key"] ?: request.headers["x-api-key"]
-            assertEquals(testApiKey, observedApiKey)
+            val observedAuth = request.headers[HttpHeaders.Authorization]
+            assertEquals("Bearer $testApiKey", observedAuth)
 
             val contentType = request.headers[HttpHeaders.ContentType]
                 ?: (request.body as? OutgoingContent)?.contentType?.toString()
@@ -152,8 +152,8 @@ class NaisGraphQlClientTest {
         val mockEngine = MockEngine { request ->
             assertTrue(request.url.toString().startsWith(testUrl))
 
-            val observedApiKey = request.headers["X-Api-Key"] ?: request.headers["x-api-key"]
-            assertEquals(testApiKey, observedApiKey)
+            val observedAuth = request.headers[HttpHeaders.Authorization]
+            assertEquals("Bearer $testApiKey", observedAuth)
 
             val contentType = request.headers[HttpHeaders.ContentType]
                 ?: (request.body as? OutgoingContent)?.contentType?.toString()

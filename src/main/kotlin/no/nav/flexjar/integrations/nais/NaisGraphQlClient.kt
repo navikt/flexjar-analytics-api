@@ -3,11 +3,14 @@ package no.nav.flexjar.integrations.nais
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
 import io.ktor.client.engine.cio.CIO
+import io.ktor.client.network.sockets.ConnectTimeoutException
+import io.ktor.client.plugins.HttpTimeout
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.client.request.header
 import io.ktor.client.request.post
 import io.ktor.client.request.setBody
 import io.ktor.http.ContentType
+import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.contentType
 import io.ktor.serialization.kotlinx.json.json
@@ -55,6 +58,9 @@ object CacheTtl {
     
     /** TTL when user has NO teams - allow quick onboarding */
     val NO_TEAMS: Duration = Duration.ofMinutes(5)
+
+    /** TTL when NAIS API lookup fails - avoid spamming calls */
+    val ERROR: Duration = Duration.ofSeconds(30)
     
     /** Default TTL for in-memory cache (legacy) */
     val DEFAULT: Duration = Duration.ofMinutes(5)
@@ -83,6 +89,9 @@ class NaisGraphQlClient private constructor(
     // Health tracking
     private val lastSuccessfulCall = AtomicReference<Instant?>(null)
     private val lastError = AtomicReference<String?>(null)
+
+    // Log throttling (reduce spam when NAIS API is unreachable)
+    private val lastThrottledLog = AtomicReference<ThrottledLog?>(null)
     
     // Metrics
     private val apiCallTimer = Timer.builder("nais_api_call_duration_seconds")
@@ -125,8 +134,11 @@ class NaisGraphQlClient private constructor(
         val cachedTeams = teamCache.get(email)
         if (cachedTeams != null) {
             cacheHitCounter.increment()
+            if (cachedTeams.contains(ERROR_SENTINEL)) {
+                return NaisApiResult.Error("NAIS API call failed recently (cached)")
+            }
             // Filter out sentinel value for empty teams
-            val teams = cachedTeams.filterNot { it == "__EMPTY__" }.toSet()
+            val teams = cachedTeams.filterNot { it == EMPTY_SENTINEL }.toSet()
             log.debug("Cache hit for user teams: $teams")
             return NaisApiResult.Success(teams)
         }
@@ -139,7 +151,7 @@ class NaisGraphQlClient private constructor(
         val response = try {
             client.post(graphqlUrl) {
                 contentType(ContentType.Application.Json)
-                header("X-Api-Key", apiKey)
+                header(HttpHeaders.Authorization, "Bearer $apiKey")
                 setBody(
                     GraphQlRequest(
                         query = USER_TEAMS_QUERY,
@@ -149,6 +161,7 @@ class NaisGraphQlClient private constructor(
             }
         } catch (e: Exception) {
             recordError("Failed to call NAIS GraphQL for user teams", e)
+            teamCache.set(email, setOf(ERROR_SENTINEL), CacheTtl.ERROR)
             return NaisApiResult.Error("API call failed", e)
         } finally {
             apiCallTimer.record(Duration.ofNanos(System.nanoTime() - startTime))
@@ -204,7 +217,10 @@ class NaisGraphQlClient private constructor(
         val cachedTeams = teamCache.get(viewerCacheKey)
         if (cachedTeams != null) {
             cacheHitCounter.increment()
-            val teams = cachedTeams.filterNot { it == "__EMPTY__" }.toSet()
+            if (cachedTeams.contains(ERROR_SENTINEL)) {
+                return NaisApiResult.Error("NAIS API call failed recently (cached)")
+            }
+            val teams = cachedTeams.filterNot { it == EMPTY_SENTINEL }.toSet()
             return NaisApiResult.Success(teams)
         }
         
@@ -216,11 +232,12 @@ class NaisGraphQlClient private constructor(
         val response = try {
             client.post(graphqlUrl) {
                 contentType(ContentType.Application.Json)
-                header("X-Api-Key", apiKey)
+                header(HttpHeaders.Authorization, "Bearer $apiKey")
                 setBody(GraphQlRequest(query = VIEWER_TEAMS_QUERY, variables = EmptyVariables()))
             }
         } catch (e: Exception) {
             recordError("Failed to call NAIS GraphQL for viewer teams", e)
+            teamCache.set(viewerCacheKey, setOf(ERROR_SENTINEL), CacheTtl.ERROR)
             return NaisApiResult.Error("API call failed", e)
         } finally {
             apiCallTimer.record(Duration.ofNanos(System.nanoTime() - startTime))
@@ -302,11 +319,26 @@ class NaisGraphQlClient private constructor(
     private fun recordError(message: String, cause: Throwable? = null) {
         apiErrorCounter.increment()
         lastError.set(message)
-        if (cause != null) {
-            log.warn(message, cause)
-        } else {
+        if (cause == null) {
             log.warn(message)
+            return
         }
+
+        if (shouldThrottleLog(cause)) {
+            val now = Instant.now(clock)
+            val last = lastThrottledLog.get()
+            val isSameMessage = last?.message == message
+            val isWithinWindow = last?.at?.isAfter(now.minus(ERROR_LOG_THROTTLE)) == true
+
+            if (isSameMessage && isWithinWindow) {
+                log.debug("$message (throttled): ${cause.javaClass.simpleName}: ${cause.message}")
+                return
+            }
+
+            lastThrottledLog.set(ThrottledLog(message = message, at = now))
+        }
+
+        log.warn(message, cause)
     }
 
     companion object {
@@ -397,6 +429,11 @@ class NaisGraphQlClient private constructor(
 
         private fun defaultHttpClient(): HttpClient {
             return HttpClient(CIO) {
+                install(HttpTimeout) {
+                    connectTimeoutMillis = 2_000
+                    requestTimeoutMillis = 5_000
+                    socketTimeoutMillis = 5_000
+                }
                 install(ContentNegotiation) {
                     json(
                         Json {
@@ -407,8 +444,21 @@ class NaisGraphQlClient private constructor(
                 }
             }
         }
+
+        private const val EMPTY_SENTINEL = "__EMPTY__"
+        private const val ERROR_SENTINEL = "__ERROR__"
+        private val ERROR_LOG_THROTTLE: Duration = Duration.ofMinutes(1)
+
+        private fun shouldThrottleLog(cause: Throwable): Boolean {
+            return cause is ConnectTimeoutException || cause is java.net.SocketTimeoutException || cause is java.net.ConnectException
+        }
     }
 }
+
+private data class ThrottledLog(
+    val message: String,
+    val at: Instant
+)
 
 @Serializable
 private data class GraphQlRequest<V>(
