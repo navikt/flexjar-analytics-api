@@ -25,7 +25,7 @@ docker run -d --name flexjar-db \
 - 📤 **Export** - CSV, JSON, and Excel exports
 - 📅 **Date range filtering** - Filter feedback by time period
 - 🏷️ **Tag management** - Add/remove tags on feedback
-- 🔐 **Azure AD authentication** - Secure access via Wonderwall
+- 🔐 **Azure AD authentication** - Secure access via NAIS Texas
 
 ## API Endpoints
 
@@ -52,7 +52,7 @@ docker run -d --name flexjar-db \
 All endpoints under `/api/v1/intern/*` are **team-scoped**.
 
 - `team` is an **optional** query parameter.
-- If `team` is omitted, the backend picks a default authorized team (primary team if present; otherwise a stable choice).
+- If `team` is omitted, the backend picks a stable default authorized team.
 - If `team` is provided but not authorized, the backend returns **403**.
 - Route handlers always use `call.authorizedTeam` (validated by `TeamAuthorizationPlugin`).
 
@@ -127,38 +127,20 @@ Authorization: Bearer <token>
 
 The token's `azp_name` claim identifies your app and determines which team the feedback belongs to.
 
-### For Analytics Dashboard Access {#getting-access}
+### Getting access
 
-To access the Flexjar Analytics dashboard, your team must be onboarded.
+This section covers access to the analytics (dashboard) endpoints.
 
-There are currently two supported approaches:
+The backend authorizes dashboard access by looking up team membership via the NAIS Console GraphQL API, using the user's email from the Azure token claims (e.g. `preferred_username`).
 
-#### Option A (legacy): AD group allow-listing
+If NAIS team lookup is not configured, the API fails closed with **503** (`TEAM_LOOKUP_NOT_CONFIGURED`).
 
-This is the current onboarding flow (manual mapping + group allow-list).
-
-#### 1. Add your team's AD group to the configuration
-
-Create a PR or open an issue to add your team's Azure AD group UUID to:
-- `flexjar-analytics-api/src/main/kotlin/no/nav/flexjar/config/auth/TeamAuthorization.kt` (GROUP_TO_TEAM mapping)
-- `flexjar-analytics-api/nais/app/dev.yaml` and `prod.yaml` (claims.groups)
-
-#### 2. Ensure you're a member of the AD group
-
-You must be a member of your team's AD group to access analytics. Contact your team lead if you're unsure which group to join.
-
-#### 3. Log in with your NAV account
-
-Once your team is onboarded, simply log in at the dashboard URL with your NAV account.
-
-#### Option B (recommended): NAIS API-backed team membership
-
-If enabled, the backend can authorize analytics access by looking up team membership via the NAIS Console GraphQL API, using the user's email from the Azure token claims (e.g. `preferred_username`). This allows scaling without updating `GROUP_TO_TEAM` for every new team.
+#### Setup (NAIS)
 
 **Setup:**
 
 1. Create a secret in NAIS Console named `flexjar-analytics-api` (in both dev and prod) with key:
-  - `NAIS_API_KEY` (get this from NAIS Console)
+  - `NAIS_API_KEY` (or `TEAMS_TOKEN`) (get this from NAIS Console)
 
   The manifests already set `NAIS_API_GRAPHQL_URL` to `https://console.nav.cloud.nais.io/graphql`.
   You may also put `NAIS_API_GRAPHQL_URL` in the same secret, but it is not required.
@@ -176,7 +158,8 @@ If enabled, the backend can authorize analytics access by looking up team member
 
 **Local testing:**
 
-To test NAIS team lookups locally, you normally need a valid `NAIS_API_KEY` (the client authenticates with `X-Api-Key`).
+To test NAIS team lookups locally, you normally need a valid `NAIS_API_KEY` (or `TEAMS_TOKEN`).
+The client authenticates to NAIS Console GraphQL using `Authorization: Bearer <token>`.
 
 If you are logged in with the NAIS CLI, you can also use the local NAIS API proxy to call the GraphQL endpoint without a real key:
 
@@ -205,8 +188,8 @@ export NAIS_API_KEY='<dev-api-key>'
 
 1. When a user logs in, the backend extracts their email from the Azure token
 2. The NAIS Console API is queried for the user's team memberships
-3. Results are cached for 5 minutes to reduce API load
-4. If the API call fails, the backend falls back to legacy AD group mapping
+3. Results are cached to reduce API load (separate TTLs for "has teams" vs "no teams")
+4. If the API call fails, access is denied (fail closed)
 
 **Observability:**
 
@@ -220,24 +203,10 @@ The NAIS API integration exposes Prometheus metrics at `/internal/prometheus`:
 | `nais_api_cache_hits_total` | Number of cache hits |
 | `nais_api_cache_misses_total` | Number of cache misses |
 
-**Fallback behavior:**
+**Notes:**
 
-When NAIS API is enabled but a lookup fails (e.g. missing email claim or NAIS API outage), the backend falls back to the legacy AD group mapping to avoid breaking existing access during rollout.
-
-
-### ⚠️ AD Group Configuration (Security Notice)
-
-Authorization relies on Azure AD Group IDs. 
-**When onboarding a new team:**
-
-| Location | File | Required? | Purpose |
-|----------|------|-----------|---------|
-| Backend Code | [`TeamAuthorization.kt`](src/main/kotlin/no/nav/flexjar/config/auth/TeamAuthorization.kt) | **Yes** | `GROUP_TO_TEAM` mapping |
-| NAIS Config (Dev) | [`nais/app/dev.yaml`](nais/app/dev.yaml) | **Yes** | `azure.application.claims.groups` |
-| NAIS Config (Prod) | [`nais/app/prod.yaml`](nais/app/prod.yaml) | **Yes** | `azure.application.claims.groups` |
-
-**Current authorized groups:**
-| Group UUID | Team Namespace |
+- Team identifiers in query params are NAIS namespace slugs (e.g. `team-esyfo`).
+- The API will return **403** (`NO_TEAM_ACCESS`) if NAIS returns no teams for the user.
 |------------|----------------|
 | `5066bb56-7f19-4b49-ae48-f1ba66abf546` | `isyfo` |
 | `ef4e9824-6f3a-4933-8f40-6edf5233d4d2` | `esyfo` |

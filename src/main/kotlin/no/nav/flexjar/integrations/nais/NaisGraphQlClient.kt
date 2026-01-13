@@ -145,7 +145,6 @@ class NaisGraphQlClient private constructor(
             // Filter out sentinel value for empty teams
             val teams = cachedTeams.filterNot { it == EMPTY_SENTINEL }.toSet()
             recordSuccess(source = "cache-user", teamsCount = teams.size, ttl = Duration.ZERO)
-            log.debug("Cache hit for user teams: $teams")
             return NaisApiResult.Success(teams)
         }
         
@@ -175,21 +174,27 @@ class NaisGraphQlClient private constructor(
         }
 
         if (response.status != HttpStatusCode.OK) {
-            val errorMsg = "NAIS GraphQL returned non-OK status: ${response.status}"
             val bodySnippet = try {
                 response.bodyAsText().take(500)
             } catch (_: Exception) {
                 null
             }
-            if (response.status == HttpStatusCode.Unauthorized || response.status == HttpStatusCode.Forbidden) {
-                val wwwAuthenticate = response.headers[HttpHeaders.WWWAuthenticate]
+            val wwwAuthenticate = if (response.status == HttpStatusCode.Unauthorized || response.status == HttpStatusCode.Forbidden) {
+                response.headers[HttpHeaders.WWWAuthenticate]
+            } else {
+                null
+            }
+
+            val errorMsg = buildString {
+                append("NAIS GraphQL returned non-OK status: ${response.status}")
                 if (!wwwAuthenticate.isNullOrBlank()) {
-                    log.warn("$errorMsg (www-authenticate=$wwwAuthenticate)")
+                    append(" (www-authenticate=$wwwAuthenticate)")
+                }
+                if (!bodySnippet.isNullOrBlank()) {
+                    append(" (body=${bodySnippet.replace("\n", " ")})")
                 }
             }
-            if (!bodySnippet.isNullOrBlank()) {
-                log.warn("$errorMsg (body=${bodySnippet.replace("\n", " ")})")
-            }
+
             recordError(errorMsg)
             teamCache.set(email, setOf(ERROR_SENTINEL), CacheTtl.ERROR)
             return NaisApiResult.Error(errorMsg)
@@ -219,8 +224,6 @@ class NaisGraphQlClient private constructor(
         val ttl = if (teams.isNotEmpty()) CacheTtl.HAS_TEAMS else CacheTtl.NO_TEAMS
         teamCache.set(email, teams, ttl)
         recordSuccess(source = "user", teamsCount = teams.size, ttl = ttl)
-        
-        log.debug("Fetched teams from NAIS API for user: $teams (TTL: ${ttl.toMinutes()}m)")
         return NaisApiResult.Success(teams)
     }
 
@@ -270,21 +273,27 @@ class NaisGraphQlClient private constructor(
         }
 
         if (response.status != HttpStatusCode.OK) {
-            val errorMsg = "NAIS GraphQL returned non-OK status: ${response.status}"
             val bodySnippet = try {
                 response.bodyAsText().take(500)
             } catch (_: Exception) {
                 null
             }
-            if (response.status == HttpStatusCode.Unauthorized || response.status == HttpStatusCode.Forbidden) {
-                val wwwAuthenticate = response.headers[HttpHeaders.WWWAuthenticate]
+            val wwwAuthenticate = if (response.status == HttpStatusCode.Unauthorized || response.status == HttpStatusCode.Forbidden) {
+                response.headers[HttpHeaders.WWWAuthenticate]
+            } else {
+                null
+            }
+
+            val errorMsg = buildString {
+                append("NAIS GraphQL returned non-OK status: ${response.status}")
                 if (!wwwAuthenticate.isNullOrBlank()) {
-                    log.warn("$errorMsg (www-authenticate=$wwwAuthenticate)")
+                    append(" (www-authenticate=$wwwAuthenticate)")
+                }
+                if (!bodySnippet.isNullOrBlank()) {
+                    append(" (body=${bodySnippet.replace("\n", " ")})")
                 }
             }
-            if (!bodySnippet.isNullOrBlank()) {
-                log.warn("$errorMsg (body=${bodySnippet.replace("\n", " ")})")
-            }
+
             recordError(errorMsg)
             teamCache.set(viewerCacheKey, setOf(ERROR_SENTINEL), CacheTtl.ERROR)
             return NaisApiResult.Error(errorMsg)
@@ -360,8 +369,13 @@ class NaisGraphQlClient private constructor(
 
         // Avoid noisy logs: just a single confirmation that NAIS lookup works.
         if (hasLoggedFirstSuccess.compareAndSet(false, true)) {
+            val ttlLabel = if (ttl == Duration.ZERO && source.startsWith("cache")) {
+                "cached"
+            } else {
+                ttl.toMinutes().toString()
+            }
             log.info(
-                "NAIS API lookup succeeded (source=$source, teamsCount=$teamsCount, ttlMinutes=${ttl.toMinutes()}, cache=${teamCache::class.simpleName})"
+                "NAIS API lookup succeeded (source=$source, teamsCount=$teamsCount, ttlMinutes=$ttlLabel, cache=${teamCache::class.simpleName})"
             )
         }
     }

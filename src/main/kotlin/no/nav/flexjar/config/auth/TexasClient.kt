@@ -39,7 +39,8 @@ class TexasClient(
      */
     suspend fun introspect(token: String): TexasIntrospectionResult? {
         return try {
-            log.info("Introspecting token with Texas: $introspectionEndpoint")
+            // Introspection happens per request in NAIS; keep this at DEBUG to avoid log spam.
+            log.debug("Introspecting token with Texas: $introspectionEndpoint")
             val response = client.post(introspectionEndpoint) {
                 contentType(ContentType.Application.Json)
                 setBody(TexasIntrospectionRequest(
@@ -49,16 +50,27 @@ class TexasClient(
             }
             
             if (response.status != HttpStatusCode.OK) {
-                log.error("Texas introspection failed with status: ${response.status}")
-                val body = response.body<String>()
-                log.error("Response body: $body")
+                // Avoid logging full response bodies; they may contain claims/PII.
+                val bodySnippet = try {
+                    response.body<String>().take(300)
+                } catch (_: Exception) {
+                    null
+                }
+                if (bodySnippet.isNullOrBlank()) {
+                    log.warn("Texas introspection failed with status: ${response.status}")
+                } else {
+                    log.warn(
+                        "Texas introspection failed with status: ${response.status} (body=${bodySnippet.replace("\n", " ")})"
+                    )
+                }
                 return null
             }
 
             val result = response.body<TexasIntrospectionResult>()
             
             if (!result.active) {
-                log.warn("Token validation failed - token is not active. Claims: $result")
+                // Avoid logging full claims payload.
+                log.warn("Token validation failed - token is not active")
                 return null
             }
             

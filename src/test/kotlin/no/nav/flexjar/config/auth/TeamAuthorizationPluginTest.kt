@@ -277,7 +277,7 @@ class TeamAuthorizationPluginTest {
     }
 
     @Test
-    fun `falls back to AD-group mapping when NAIS lookup resolves no teams`() = testApplication {
+    fun `denies access when NAIS lookup resolves no teams (no legacy fallback)`() = testApplication {
         application {
             install(ContentNegotiation) {
                 json()
@@ -291,7 +291,7 @@ class TeamAuthorizationPluginTest {
                             email = "test@nav.no",
                             token = "token",
                             clientId = "client",
-                            // team-esyfo mapping exists in TeamAuthorization.kt
+                            // Groups should not grant access without NAIS team membership.
                             groups = listOf("ef4e9824-6f3a-4933-8f40-6edf5233d4d2"),
                         )
                     }
@@ -315,7 +315,8 @@ class TeamAuthorizationPluginTest {
             header(HttpHeaders.Authorization, "Bearer whatever")
         }
 
-        assertEquals(HttpStatusCode.OK, response.status)
-        assertEquals("team-esyfo", response.bodyAsText())
+        assertEquals(HttpStatusCode.Forbidden, response.status)
+        val body = response.bodyAsText()
+        assertTrue(body.contains("NO_TEAM_ACCESS"))
     }
 }

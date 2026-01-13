@@ -10,7 +10,7 @@ import no.nav.flexjar.integrations.nais.NaisApiResult
 import no.nav.flexjar.integrations.nais.NaisGraphQlClient
 import org.slf4j.LoggerFactory
 
-private val log = LoggerFactory.getLogger("TeamAuthorizationPlugin")
+private val log = LoggerFactory.getLogger("no.nav.flexjar.config.auth.TeamAuthorizationPlugin")
 
 /**
  * Minimal abstraction so TeamAuthorizationPlugin can be tested without calling the real NAIS API.
@@ -71,6 +71,18 @@ val TeamAuthorizationPlugin = createRouteScopedPlugin("TeamAuthorization", ::Tea
             call.respond(HttpStatusCode.Unauthorized, "Not authenticated")
             return@on
         }
+
+        if (naisLookup == null) {
+            log.error("TeamAuthorization: NAIS team lookup is not configured (missing NAIS_API_KEY/TEAMS_TOKEN and/or NAIS_API_GRAPHQL_URL/NAIS_API_ENDPOINT)")
+            call.respond(
+                HttpStatusCode.ServiceUnavailable,
+                mapOf(
+                    "error" to "TEAM_LOOKUP_NOT_CONFIGURED",
+                    "message" to "Team lookup via NAIS is not configured"
+                )
+            )
+            return@on
+        }
         
         val authorizedTeams = resolveAuthorizedTeams(principal, naisLookup)
         
@@ -99,50 +111,46 @@ val TeamAuthorizationPlugin = createRouteScopedPlugin("TeamAuthorization", ::Tea
             ))
             return@on
         } else {
-            // Prefer the legacy primary team if it exists, otherwise pick a stable team from the resolved set.
-            principal.getPrimaryTeam()?.takeIf { it in authorizedTeams }
-                ?: authorizedTeams.sorted().first()
+            // Pick a stable team from the resolved set.
+            authorizedTeams.sorted().first()
         }
         
         // Store in call attributes for route handlers
         call.attributes.put(AuthorizedTeamKey, team)
         call.attributes.put(AuthorizedTeamsKey, authorizedTeams)
         call.attributes.put(AuthorizedPrincipalKey, principal)
-        
-        log.debug("TeamAuthorization: User ${principal.navIdent} authorized for team: $team")
     }
 }
 
 private suspend fun resolveAuthorizedTeams(
     principal: BrukerPrincipal,
-    naisLookup: NaisTeamLookup?
+    naisLookup: NaisTeamLookup
 ): Set<String> {
-    if (naisLookup == null) {
-        val teams = principal.getAuthorizedTeams()
-        log.debug("NAIS API not configured, using AD group mapping. User ${principal.navIdent} authorized for teams: $teams")
-        return teams
-    }
-
     val email = principal.email
 
     val teamsByEmailResult: NaisApiResult<Set<String>> = if (!email.isNullOrBlank()) {
         naisLookup.getTeamSlugsForUserResult(email)
     } else {
-        log.warn("User ${principal.navIdent} has no email claim, cannot lookup teams via NAIS API")
-        NaisApiResult.Success(emptySet())
+        // Some tokens may not include email; try viewer query instead.
+        log.debug("User ${principal.navIdent} has no email claim, falling back to NAIS viewer lookup")
+        naisLookup.getTeamSlugsForViewerResult()
     }
 
     val resolvedTeamsResult: NaisApiResult<Set<String>> = when (teamsByEmailResult) {
         is NaisApiResult.Success -> {
             if (teamsByEmailResult.value.isNotEmpty()) {
-                log.debug("Resolved teams from NAIS API (by email) for ${principal.navIdent}: ${teamsByEmailResult.value}")
+                log.debug(
+                    "Resolved teams from NAIS API (by email) for ${principal.navIdent} (count=${teamsByEmailResult.value.size})"
+                )
                 teamsByEmailResult
             } else {
                 // Matches NAIS Console behavior: `me { ... on User { teams { ... }}}`.
                 // Depending on NAIS API auth configuration, `me` might not be a User.
                 val viewerTeamsResult = naisLookup.getTeamSlugsForViewerResult()
                 if (viewerTeamsResult is NaisApiResult.Success && viewerTeamsResult.value.isNotEmpty()) {
-                    log.debug("Resolved teams from NAIS API (viewer query) for ${principal.navIdent}: ${viewerTeamsResult.value}")
+                    log.debug(
+                        "Resolved teams from NAIS API (viewer query) for ${principal.navIdent} (count=${viewerTeamsResult.value.size})"
+                    )
                 }
                 viewerTeamsResult
             }
@@ -150,30 +158,19 @@ private suspend fun resolveAuthorizedTeams(
         is NaisApiResult.Error -> teamsByEmailResult
     }
 
-    val fallbackTeams = principal.getAuthorizedTeams()
-
     return when (resolvedTeamsResult) {
         is NaisApiResult.Success -> {
-            if (resolvedTeamsResult.value.isEmpty()) {
-                // NAIS lookup succeeded but yielded no teams.
-                log.info(
-                    "NAIS API returned no teams, falling back to AD group mapping for ${principal.navIdent}: $fallbackTeams"
-                )
-                fallbackTeams
-            } else {
-                resolvedTeamsResult.value
-            }
+            resolvedTeamsResult.value
         }
         is NaisApiResult.Error -> {
-            // NAIS lookup failed (e.g. 401/timeout). This is NOT an "empty teams" situation.
-            val msg =
-                "NAIS API team lookup failed (${resolvedTeamsResult.message}), falling back to AD group mapping for ${principal.navIdent}: $fallbackTeams"
+            // NAIS lookup failed (e.g. 401/timeout). Fail closed.
+            val msg = "NAIS API team lookup failed (${resolvedTeamsResult.message}) for ${principal.navIdent}"
             if (resolvedTeamsResult.message.contains("cached", ignoreCase = true)) {
                 log.debug(msg)
             } else {
                 log.warn(msg)
             }
-            fallbackTeams
+            emptySet()
         }
     }
 }

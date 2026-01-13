@@ -10,6 +10,8 @@ import io.ktor.server.testing.*
 import kotlinx.serialization.json.Json
 import no.nav.flexjar.config.auth.BrukerPrincipal
 import no.nav.flexjar.config.auth.TeamAuthorizationPlugin
+import no.nav.flexjar.config.auth.NaisTeamLookup
+import no.nav.flexjar.integrations.nais.NaisApiResult
 import no.nav.flexjar.config.configureSerialization
 import no.nav.flexjar.config.configureStatusPages
 import no.nav.flexjar.config.configureRateLimiting
@@ -186,7 +188,7 @@ fun Application.testModule(
                         email = "test.user@nav.no",
                         token = tokenCredential.token,
                         clientId = "dev-gcp:team-esyfo:flexjar-analytics",
-                        // Include test groups that map to teams
+                        // Groups are kept for realism, but team access is resolved via NAIS lookup in tests.
                         groups = listOf(
                             "5066bb56-7f19-4b49-ae48-f1ba66abf546", // teamsykefravr
                             "ef4e9824-6f3a-4933-8f40-6edf5233d4d2", // team-esyfo
@@ -197,6 +199,21 @@ fun Application.testModule(
                 } else null
             }
         }
+    }
+
+    val testNaisTeamLookup = object : NaisTeamLookup {
+        private val teams = setOf(
+            "flex",
+            "team-test",
+            "team-esyfo",
+            "teamsykefravr",
+        )
+
+        override suspend fun getTeamSlugsForUserResult(email: String): NaisApiResult<Set<String>> =
+            NaisApiResult.Success(teams)
+
+        override suspend fun getTeamSlugsForViewerResult(): NaisApiResult<Set<String>> =
+            NaisApiResult.Success(teams)
     }
     
     // Create services with the injected repositories/services
@@ -211,7 +228,10 @@ fun Application.testModule(
 
         authenticate("test-azure") {
             // Install TeamAuthorizationPlugin like production
-            install(TeamAuthorizationPlugin)
+            install(TeamAuthorizationPlugin) {
+                // Ensure tests don't depend on NAIS env vars.
+                naisTeamLookupProvider = { testNaisTeamLookup }
+            }
             
             feedbackRoutes(feedbackService)
             surveyFacetRoutes(feedbackService)
