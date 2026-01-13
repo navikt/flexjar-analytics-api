@@ -31,7 +31,7 @@ import java.time.Instant
 import java.util.concurrent.atomic.AtomicReference
 import java.util.concurrent.atomic.AtomicBoolean
 
-private val log = LoggerFactory.getLogger("NaisGraphQlClient")
+private val log = LoggerFactory.getLogger("no.nav.flexjar.integrations.nais.NaisGraphQlClient")
 
 /**
  * Result type for NAIS API operations.
@@ -144,6 +144,7 @@ class NaisGraphQlClient private constructor(
             }
             // Filter out sentinel value for empty teams
             val teams = cachedTeams.filterNot { it == EMPTY_SENTINEL }.toSet()
+            recordSuccess(source = "cache-user", teamsCount = teams.size, ttl = Duration.ZERO)
             log.debug("Cache hit for user teams: $teams")
             return NaisApiResult.Success(teams)
         }
@@ -244,6 +245,7 @@ class NaisGraphQlClient private constructor(
                 return NaisApiResult.Error("NAIS API call failed recently (cached)")
             }
             val teams = cachedTeams.filterNot { it == EMPTY_SENTINEL }.toSet()
+            recordSuccess(source = "cache-viewer", teamsCount = teams.size, ttl = Duration.ZERO)
             return NaisApiResult.Success(teams)
         }
         

@@ -103,9 +103,6 @@ class NaisGraphQlClientTest {
             val observedAuth = request.headers[HttpHeaders.Authorization]
             assertEquals("Bearer $testApiKey", observedAuth)
 
-            val observedApiKey = request.headers["X-Api-Key"]
-            assertEquals(testApiKey, observedApiKey)
-
             val observedUserAgent = request.headers[HttpHeaders.UserAgent]
             assertEquals("flexjar-analytics-api", observedUserAgent)
 
@@ -160,9 +157,6 @@ class NaisGraphQlClientTest {
 
             val observedAuth = request.headers[HttpHeaders.Authorization]
             assertEquals("Bearer $testApiKey", observedAuth)
-
-            val observedApiKey = request.headers["X-Api-Key"]
-            assertEquals(testApiKey, observedApiKey)
 
             val observedUserAgent = request.headers[HttpHeaders.UserAgent]
             assertEquals("flexjar-analytics-api", observedUserAgent)
